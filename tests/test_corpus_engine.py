@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -63,6 +64,14 @@ Hello
         self.assertFalse(corpus_engine.has_material_refresh_results(results))
         results.append(corpus_engine.RefreshResult("three", "refreshed", ["page"], "changed"))
         self.assertTrue(corpus_engine.has_material_refresh_results(results))
+    def test_agentic_engineering_baseline_fixture_preserves_registry_shape(self):
+        fixture_path = Path(__file__).parent / "fixtures" / "agentic_engineering_registry.json"
+        registry = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(registry["schema_version"], 1)
+        self.assertEqual(registry["domain"], "agentic-engineering")
+        self.assertEqual(len(registry["sources"]), 19)
+        self.assertTrue(all(source.get("id") for source in registry["sources"]))
+        self.assertTrue(all(source.get("source_type") for source in registry["sources"]))
 
 
 if __name__ == "__main__":
