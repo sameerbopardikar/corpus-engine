@@ -430,10 +430,10 @@ class WorkItem:
         action = _require_text(self.action, "action")
         if action not in WORK_ACTIONS:
             raise ValueError(f"unknown action: {action!r}")
-        expected_id = stable_id("work", domain, candidate_id, action)
+        idempotency_key = _require_text(self.idempotency_key, "idempotency_key")
+        expected_id = stable_id("work", domain, candidate_id, action, idempotency_key)
         if _require_text(self.work_id, "work_id") != expected_id:
             raise ValueError("work_id does not match canonical work identity")
-        idempotency_key = _require_text(self.idempotency_key, "idempotency_key")
         if not isinstance(self.budget_estimate, (int, float)) or isinstance(self.budget_estimate, bool):
             raise ValueError("budget_estimate must be numeric")
         budget = float(self.budget_estimate)
@@ -511,11 +511,16 @@ class WorkItem:
         now: datetime | None = None,
     ) -> "WorkItem":
         moment = utcnow() if now is None else _aware_utc(now, "now")
-        work_id = stable_id("work", domain, candidate_id, action)
+        key = (
+            stable_id("idem", domain, candidate_id, action)
+            if idempotency_key is None
+            else _require_text(idempotency_key, "idempotency_key")
+        )
+        work_id = stable_id("work", domain, candidate_id, action, key)
         return cls(
             schema_version=SCHEMA_VERSION,
             work_id=work_id,
-            idempotency_key=work_id if idempotency_key is None else idempotency_key,
+            idempotency_key=key,
             domain=domain,
             candidate_id=candidate_id,
             action=action,

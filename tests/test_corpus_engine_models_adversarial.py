@@ -62,6 +62,13 @@ class IdentityAndSerializationTests(unittest.TestCase):
             models.stable_id("work", "a|b", "c", "verify"),
         )
 
+    def test_work_idempotency_keys_define_distinct_runs(self):
+        first = pending_work(idempotency_key="cycle-1")
+        duplicate = pending_work(idempotency_key="cycle-1")
+        next_cycle = pending_work(idempotency_key="cycle-2")
+        self.assertEqual(first.work_id, duplicate.work_id)
+        self.assertNotEqual(first.work_id, next_cycle.work_id)
+
     def test_all_records_round_trip_through_strict_json(self):
         obs = observation()
         candidate = models.CandidateRecord.from_observation(obs, SCORES)
@@ -102,7 +109,7 @@ class IdentityAndSerializationTests(unittest.TestCase):
         mutable = {"priority": 1.0}
         work = models.WorkItem(
             schema_version=models.SCHEMA_VERSION,
-            work_id=models.stable_id("work", "agentic-engineering", "cand_abc", "verify"),
+            work_id=models.stable_id("work", "agentic-engineering", "cand_abc", "verify", "idempotent"),
             idempotency_key="idempotent",
             domain="agentic-engineering",
             candidate_id="cand_abc",
