@@ -4,6 +4,7 @@ import importlib.util
 import json
 import sys
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -139,6 +140,21 @@ class CanonicalizationAndInputTests(unittest.TestCase):
         ipv6 = observation(canonical_url="https://[::1]:443/a/../b/#x")
         self.assertEqual(ipv6.canonical_url, "https://[::1]/b")
 
+    def test_equivalent_unreserved_percent_encoding_converges(self):
+        plain = observation(canonical_url="https://example.com/~alice")
+        encoded = observation(canonical_url="https://example.com/%7ealice#fragment")
+        self.assertEqual(plain.canonical_url, encoded.canonical_url)
+        self.assertEqual(plain.candidate_key, encoded.candidate_key)
+
+    def test_relational_queue_invariants_hold_for_direct_construction(self):
+        pending = pending_work()
+        with self.assertRaises(ValueError):
+            replace(pending, attempts=models.MAX_ATTEMPTS, last_error="exhausted")
+        with self.assertRaises(ValueError):
+            replace(pending, state="dead_letter", attempts=0, last_error="failure")
+        with self.assertRaises(ValueError):
+            replace(pending, proof_receipts=("stale-receipt",))
+
     def test_non_finite_budget_blank_key_and_naive_now_are_rejected(self):
         with self.assertRaises(ValueError):
             pending_work(budget_estimate=float("nan"))
@@ -163,6 +179,36 @@ class LeaseFencingTests(unittest.TestCase):
             leased.complete(owner="worker-a", lease_token="token-a", proof_receipt="receipt.json", now=expired)
         with self.assertRaises(ValueError):
             leased.fail(owner="worker-a", lease_token="token-a", error="timeout", now=expired)
+
+    def test_lifecycle_timestamps_cannot_move_backward(self):
+        created = pending_work(now=NOW)
+        with self.assertRaises(ValueError):
+            created.lease(
+                owner="worker-a",
+                ttl_seconds=60,
+                now=NOW - timedelta(seconds=1),
+                lease_token="token-a",
+            )
+        leased = created.lease(
+            owner="worker-a",
+            ttl_seconds=60,
+            now=NOW + timedelta(seconds=10),
+            lease_token="token-a",
+        )
+        with self.assertRaises(ValueError):
+            leased.complete(
+                owner="worker-a",
+                lease_token="token-a",
+                proof_receipt="receipt.json",
+                now=NOW + timedelta(seconds=5),
+            )
+        with self.assertRaises(ValueError):
+            leased.fail(
+                owner="worker-a",
+                lease_token="token-a",
+                error="backdated",
+                now=NOW + timedelta(seconds=5),
+            )
 
     def test_old_token_is_fenced_after_expiry_and_release(self):
         first = pending_work().lease(owner="worker-a", ttl_seconds=1, now=NOW, lease_token="token-a")

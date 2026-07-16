@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import posixpath
+import re
 import secrets
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -88,6 +89,20 @@ def _require_text(value: Any, field_name: str) -> str:
     return value.strip()
 
 
+_UNRESERVED_URL_BYTES = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_PERCENT_ESCAPE = re.compile(r"%([0-9A-Fa-f]{2})")
+
+
+def _normalize_percent_encoding(value: str) -> str:
+    def replace_escape(match: re.Match[str]) -> str:
+        byte = int(match.group(1), 16)
+        if byte in _UNRESERVED_URL_BYTES:
+            return chr(byte)
+        return f"%{byte:02X}"
+
+    return _PERCENT_ESCAPE.sub(replace_escape, value)
+
+
 def _normalize_url(url: str) -> str:
     raw = _require_text(url, "canonical_url")
     parsed = urlsplit(raw)
@@ -108,7 +123,7 @@ def _normalize_url(url: str) -> str:
         raise ValueError("canonical_url has an invalid port") from exc
     if port and not ((scheme == "https" and port == 443) or (scheme == "http" and port == 80)):
         normalized_host = f"{normalized_host}:{port}"
-    path = parsed.path or "/"
+    path = _normalize_percent_encoding(parsed.path or "/")
     normalized_path = posixpath.normpath(path)
     if path.startswith("/") and not normalized_path.startswith("/"):
         normalized_path = f"/{normalized_path}"
@@ -116,7 +131,7 @@ def _normalize_url(url: str) -> str:
         normalized_path = ""
     else:
         normalized_path = normalized_path.rstrip("/")
-    return urlunsplit((scheme, normalized_host, normalized_path, parsed.query, ""))
+    return urlunsplit((scheme, normalized_host, normalized_path, _normalize_percent_encoding(parsed.query), ""))
 
 
 def _frozen_scores(scores: Mapping[str, float], *, exact_candidate_scores: bool) -> Mapping[str, float]:
@@ -456,6 +471,16 @@ class WorkItem:
         retry_after = self.retry_after
         proof_receipts = _text_tuple(self.proof_receipts, "proof_receipts")
         last_error = self.last_error
+        if state in {"pending", "leased"} and self.attempts >= MAX_ATTEMPTS:
+            raise ValueError(f"{state} work cannot have exhausted attempts")
+        if state == "dead_letter" and self.attempts < MAX_ATTEMPTS:
+            raise ValueError("dead-letter work requires exhausted attempts")
+        if state != "done" and proof_receipts:
+            raise ValueError(f"{state} work cannot retain proof receipts")
+        if retry_after is not None and self.attempts == 0:
+            raise ValueError("retry_after requires at least one failed attempt")
+        if self.attempts > 0 and last_error is None:
+            raise ValueError("attempted work requires last_error context")
         if state == "leased":
             lease_owner = _require_text(lease_owner, "lease_owner")
             lease_token = _require_text(lease_token, "lease_token")
@@ -539,6 +564,12 @@ class WorkItem:
             updated_at=iso(moment),
         )
 
+    def _transition_moment(self, now: datetime | None) -> datetime:
+        moment = utcnow() if now is None else _aware_utc(now, "now")
+        if moment < _parse_required_iso(self.updated_at, "updated_at"):
+            raise ValueError("transition time cannot precede updated_at")
+        return moment
+
     def is_lease_expired(self, *, now: datetime | None = None) -> bool:
         if self.state != "leased":
             return False
@@ -559,7 +590,7 @@ class WorkItem:
             raise ValueError(f"cannot lease work item in state {self.state!r}")
         if not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool) or ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be a positive integer")
-        moment = utcnow() if now is None else _aware_utc(now, "now")
+        moment = self._transition_moment(now)
         retry_after = parse_iso(self.retry_after)
         if retry_after is not None and moment < retry_after:
             raise ValueError("work item is not eligible until retry_after")
@@ -582,7 +613,7 @@ class WorkItem:
             raise ValueError("lease owner does not match current lease")
         if _require_text(lease_token, "lease_token") != self.lease_token:
             raise ValueError("lease token does not match current lease")
-        moment = utcnow() if now is None else _aware_utc(now, "now")
+        moment = self._transition_moment(now)
         if self.is_lease_expired(now=moment):
             raise ValueError("lease has expired")
         return moment
@@ -590,7 +621,7 @@ class WorkItem:
     def release_if_expired(self, *, now: datetime | None = None) -> "WorkItem":
         if not self.is_lease_expired(now=now):
             return self
-        moment = utcnow() if now is None else _aware_utc(now, "now")
+        moment = self._transition_moment(now)
         attempts = self.attempts + 1
         next_state = "dead_letter" if attempts >= MAX_ATTEMPTS else "pending"
         error = f"lease expired at {self.lease_expires_at}"
