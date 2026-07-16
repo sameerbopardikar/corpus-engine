@@ -14,6 +14,8 @@ models = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = models
 spec.loader.exec_module(models)
 
+NOW = datetime(2026, 7, 16, tzinfo=timezone.utc)
+
 
 def make_observation(**overrides):
     fields = dict(
@@ -208,11 +210,11 @@ class WorkItemTests(unittest.TestCase):
     def test_create_produces_stable_deterministic_work_id(self):
         w1 = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
-            score_components={"priority_score": 0.5}, budget_estimate=1.0,
+            score_components={"priority_score": 0.5}, budget_estimate=1.0, now=NOW,
         )
         w2 = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
-            score_components={"priority_score": 0.9}, budget_estimate=2.0,
+            score_components={"priority_score": 0.9}, budget_estimate=2.0, now=NOW,
         )
         self.assertEqual(w1.work_id, w2.work_id)
         self.assertEqual(w1.idempotency_key, w2.idempotency_key)
@@ -223,23 +225,23 @@ class WorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             models.WorkItem.create(
                 domain="agentic-engineering", candidate_id="cand_abc", action="teleport",
-                score_components={}, budget_estimate=1.0,
+                score_components={}, budget_estimate=1.0, now=NOW,
             )
 
     def test_create_rejects_negative_budget(self):
         with self.assertRaises(ValueError):
             models.WorkItem.create(
                 domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
-                score_components={}, budget_estimate=-1.0,
+                score_components={}, budget_estimate=-1.0, now=NOW,
             )
 
     def test_lease_sets_owner_and_expiry(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="acquire",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now)
+        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         self.assertEqual(leased.state, "leased")
         self.assertEqual(leased.lease_owner, "worker-1")
         self.assertFalse(leased.is_lease_expired(now=now + timedelta(seconds=30)))
@@ -248,20 +250,20 @@ class WorkItemTests(unittest.TestCase):
     def test_lease_rejects_double_lease(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="acquire",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now)
+        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         with self.assertRaises(ValueError):
             leased.lease(owner="worker-2", ttl_seconds=60, now=now)
 
     def test_expired_lease_releases_back_to_pending_and_increments_attempts(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="acquire",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now)
+        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         later = now + timedelta(seconds=120)
         released = leased.release_if_expired(now=later)
         self.assertEqual(released.state, "pending")
@@ -272,12 +274,12 @@ class WorkItemTests(unittest.TestCase):
     def test_expired_leases_reach_dead_letter_at_attempt_limit(self):
         current = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="acquire",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         started = datetime(2026, 7, 16, tzinfo=timezone.utc)
         for attempt in range(models.MAX_ATTEMPTS):
             moment = started + timedelta(seconds=attempt * 2)
-            current = current.lease(owner="worker-1", ttl_seconds=1, now=moment)
+            current = current.lease(owner="worker-1", ttl_seconds=1, now=moment, lease_token=f"token-{attempt}")
             current = current.release_if_expired(now=moment + timedelta(seconds=1))
         self.assertEqual(current.state, "dead_letter")
         self.assertEqual(current.attempts, models.MAX_ATTEMPTS)
@@ -285,10 +287,10 @@ class WorkItemTests(unittest.TestCase):
     def test_release_if_expired_is_noop_when_not_expired(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="acquire",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now)
+        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         still_leased = leased.release_if_expired(now=now + timedelta(seconds=10))
         self.assertEqual(still_leased.state, "leased")
         self.assertEqual(still_leased.lease_owner, "worker-1")
@@ -296,33 +298,33 @@ class WorkItemTests(unittest.TestCase):
     def test_complete_records_proof_receipt(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="verify",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now)
-        done = leased.complete(proof_receipt="receipts/verify/cand_abc.json", now=now)
+        leased = w.lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
+        done = leased.complete(owner="worker-1", lease_token="token-1", proof_receipt="receipts/verify/cand_abc.json", now=now)
         self.assertEqual(done.state, "done")
         self.assertIn("receipts/verify/cand_abc.json", done.proof_receipts)
 
     def test_complete_requires_leased_state(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="verify",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         with self.assertRaises(ValueError):
-            w.complete(proof_receipt="receipts/verify/cand_abc.json")
+            w.complete(owner="worker-1", lease_token="token-1", proof_receipt="receipts/verify/cand_abc.json", now=NOW)
 
     def test_fail_sets_retry_after_and_moves_to_dead_letter_after_max_attempts(self):
         w = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="verify",
-            score_components={}, budget_estimate=1.0,
+            score_components={}, budget_estimate=1.0, now=NOW,
         )
         started = datetime(2026, 7, 16, tzinfo=timezone.utc)
         current = w
         for attempt in range(models.MAX_ATTEMPTS):
             moment = started + timedelta(seconds=attempt * 30)
-            current = current.lease(owner="worker-1", ttl_seconds=60, now=moment)
-            current = current.fail(retry_after_seconds=30, now=moment)
+            current = current.lease(owner="worker-1", ttl_seconds=60, now=moment, lease_token=f"token-{attempt}")
+            current = current.fail(owner="worker-1", lease_token=f"token-{attempt}", error="test failure", retry_after_seconds=30, now=moment)
         self.assertEqual(current.state, "dead_letter")
         self.assertEqual(current.attempts, models.MAX_ATTEMPTS)
 
@@ -330,11 +332,11 @@ class WorkItemTests(unittest.TestCase):
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
         leased = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="verify",
-            score_components={}, budget_estimate=1.0,
-        ).lease(owner="worker-1", ttl_seconds=60, now=now)
+            score_components={}, budget_estimate=1.0, now=NOW,
+        ).lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         with self.assertRaises(ValueError):
-            leased.fail(retry_after_seconds=0, now=now)
-        failed = leased.fail(retry_after_seconds=30, now=now)
+            leased.fail(owner="worker-1", lease_token="token-1", error="test failure", retry_after_seconds=0, now=now)
+        failed = leased.fail(owner="worker-1", lease_token="token-1", error="test failure", retry_after_seconds=30, now=now)
         with self.assertRaises(ValueError):
             failed.lease(owner="worker-2", ttl_seconds=60, now=now + timedelta(seconds=29))
         self.assertEqual(
@@ -346,11 +348,11 @@ class WorkItemTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             models.WorkItem.create(
                 domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
-                score_components={"priority": float("nan")}, budget_estimate=1.0,
+                score_components={"priority": float("nan")}, budget_estimate=1.0, now=NOW,
             )
         work = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
-            score_components={"priority": 1.0}, budget_estimate=1.0,
+            score_components={"priority": 1.0}, budget_estimate=1.0, now=NOW,
         )
         with self.assertRaises(TypeError):
             work.score_components["priority"] = 2.0
@@ -358,7 +360,7 @@ class WorkItemTests(unittest.TestCase):
     def test_idempotency_key_can_be_overridden_for_distinct_retries(self):
         w1 = models.WorkItem.create(
             domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
-            score_components={}, budget_estimate=1.0, idempotency_key="manual-key-1",
+            score_components={}, budget_estimate=1.0, now=NOW, idempotency_key="manual-key-1",
         )
         self.assertEqual(w1.idempotency_key, "manual-key-1")
         self.assertNotEqual(w1.work_id, w1.idempotency_key)
