@@ -159,7 +159,7 @@ class DiscoveryAdversarialTests(unittest.TestCase):
     def test_current_projection_fences_stale_worker_after_re_lease(self):
         engine = self.engine()
         work = self.enqueue(engine)
-        engine.lease_work(
+        first = engine.lease_work(
             work.work_id,
             owner="worker-a",
             ttl_seconds=1,
@@ -179,6 +179,7 @@ class DiscoveryAdversarialTests(unittest.TestCase):
                 work.work_id,
                 owner="worker-a",
                 lease_token="token-a",
+                lease_generation=first.lease_generation,
                 proof_receipt="stale.json",
                 now=NOW + timedelta(seconds=3),
             )
@@ -186,6 +187,7 @@ class DiscoveryAdversarialTests(unittest.TestCase):
             work.work_id,
             owner="worker-b",
             lease_token="token-b",
+            lease_generation=second.lease_generation,
             proof_receipt="fresh.json",
             now=NOW + timedelta(seconds=3),
         )

@@ -215,8 +215,8 @@ class WorkQueueTests(DiscoveryEngineTestCase):
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
-        engine.fail_work(work.work_id, owner="worker-1", lease_token="token-1", error="test failure", retry_after_seconds=30, now=now)
+        leased = engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
+        engine.fail_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, error="test failure", retry_after_seconds=30, now=now)
         with self.assertRaises(ValueError):
             engine.lease_work(work.work_id, owner="worker-2", ttl_seconds=60, now=now + timedelta(seconds=29))
         recovered = engine.lease_work(work.work_id, owner="worker-2", ttl_seconds=60, now=now + timedelta(seconds=30))
@@ -232,8 +232,8 @@ class WorkQueueTests(DiscoveryEngineTestCase):
         work_id = work.work_id
         for attempt in range(models.MAX_ATTEMPTS):
             moment = started + timedelta(seconds=attempt * 60)
-            engine.lease_work(work_id, owner="worker-1", ttl_seconds=1, now=moment, lease_token=f"token-{attempt}")
-            engine.fail_work(work_id, owner="worker-1", lease_token=f"token-{attempt}", error="test failure", retry_after_seconds=1, now=moment)
+            leased = engine.lease_work(work_id, owner="worker-1", ttl_seconds=1, now=moment, lease_token=f"token-{attempt}")
+            engine.fail_work(work_id, owner="worker-1", lease_token=f"token-{attempt}", lease_generation=leased.lease_generation, error="test failure", retry_after_seconds=1, now=moment)
         final = engine.work_items[work_id]
         self.assertEqual(final.state, "dead_letter")
         self.assertEqual(final.attempts, models.MAX_ATTEMPTS)
@@ -245,10 +245,10 @@ class WorkQueueTests(DiscoveryEngineTestCase):
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
+        leased = engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         with self.assertRaises(ValueError):
-            engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", proof_receipt="   ", now=now)
-        done = engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", proof_receipt="receipts/verify/cand_abc.json", now=now)
+            engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt="   ", now=now)
+        done = engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt="receipts/verify/cand_abc.json", now=now)
         self.assertEqual(done.state, "done")
         self.assertIn("receipts/verify/cand_abc.json", done.proof_receipts)
 
@@ -259,8 +259,8 @@ class WorkQueueTests(DiscoveryEngineTestCase):
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
-        engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
-        engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", proof_receipt="receipts/acquire/cand_abc.json", now=now)
+        leased = engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
+        engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt="receipts/acquire/cand_abc.json", now=now)
 
         restarted = self.engine()
         restored = restarted.work_items[work.work_id]

@@ -464,6 +464,7 @@ class DiscoveryEngine:
         *,
         owner: str,
         lease_token: str,
+        lease_generation: int,
         error: str,
         retry_after_seconds: int = 60,
         now=None,
@@ -472,6 +473,7 @@ class DiscoveryEngine:
             failed = self.work_items[work_id].fail(
                 owner=owner,
                 lease_token=lease_token,
+                lease_generation=lease_generation,
                 error=error,
                 retry_after_seconds=retry_after_seconds,
                 now=now,
@@ -486,6 +488,7 @@ class DiscoveryEngine:
         *,
         owner: str,
         lease_token: str,
+        lease_generation: int,
         proof_receipt: str,
         now=None,
     ) -> WorkItem:
@@ -493,6 +496,7 @@ class DiscoveryEngine:
             done = self.work_items[work_id].complete(
                 owner=owner,
                 lease_token=lease_token,
+                lease_generation=lease_generation,
                 proof_receipt=proof_receipt,
                 now=now,
             )

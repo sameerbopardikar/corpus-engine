@@ -15,6 +15,22 @@ The first production proof is the Agentic Engineering corpus. The architecture r
 - External claims never silently become Sameer's beliefs.
 - Runtime deployment into `~/.hermes/scripts/` occurs only after tests, shadow verification, backup, and rollback preparation.
 
+## Personal V0 — use now
+
+The first usable slice is local, sequential, deterministic-first, and promotion-disabled:
+
+```bash
+./scripts/agentic-engineering-v0 --cycle-id "$(date -u +%F)-personal"
+```
+
+It validates and loads the reviewed Agentic Engineering candidate seed, scans the current corpus for topic coverage, ranks evidence gaps, queues bounded inspection work, and writes:
+
+- `/root/corpora/agentic-engineering/discovery/personal-v0/latest.md`
+- `/root/corpora/agentic-engineering/discovery/personal-v0/latest.json`
+- `/root/exports/thinker-corpora/agentic-engineering/self-expansion-v0/discovery-ledger.jsonl`
+
+It does **not** promote sources or mutate Expert/Percival production. Use `--dry-run` for a zero-write preview and `--queue-top N` to control how many inspect items enter the local queue.
+
 ## Baseline
 
 ```bash
