@@ -71,6 +71,13 @@ class CandidateObservationTests(unittest.TestCase):
         b = make_observation(entity_type="paper")
         self.assertNotEqual(a.candidate_key, b.candidate_key)
 
+    def test_observation_key_is_stable_but_tracks_distinct_evidence(self):
+        a = make_observation()
+        duplicate = make_observation(observed_at="2026-07-16T12:00:00Z")
+        distinct = make_observation(evidence_pointer="https://github.com/example/repo/commit/def456")
+        self.assertEqual(a.observation_key, duplicate.observation_key)
+        self.assertNotEqual(a.observation_key, distinct.observation_key)
+
 
 class CandidateRecordTests(unittest.TestCase):
     def test_from_observation_creates_discovered_record_with_transparent_scores(self):
@@ -146,6 +153,17 @@ class CandidateRecordTests(unittest.TestCase):
         self.assertEqual(updated.occurrences, 2)
         self.assertGreater(updated.score_components["corroboration"], record.score_components["corroboration"])
         self.assertEqual(updated.candidate_id, record.candidate_id)
+
+    def test_duplicate_observation_is_idempotent(self):
+        obs = make_observation()
+        scores = {
+            "authority": 0.5, "demonstrated_practice": 0.5, "novelty": 0.5,
+            "relevance": 0.5, "corroboration": 0.2, "production_or_scientific_value": 0.5,
+            "cost": 0.5,
+        }
+        record = models.CandidateRecord.from_observation(obs, scores)
+        duplicate = make_observation(observed_at="2026-07-16T12:00:00Z")
+        self.assertIs(record.observe(duplicate), record)
 
     def test_observe_rejects_mismatched_candidate_key(self):
         obs = make_observation()

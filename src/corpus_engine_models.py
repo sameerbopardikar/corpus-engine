@@ -159,6 +159,15 @@ class CandidateObservation:
     def candidate_key(self) -> str:
         return stable_id("cand", self.domain, self.entity_type, _normalize_url(self.canonical_url))
 
+    @property
+    def observation_key(self) -> str:
+        return stable_id(
+            "obs",
+            self.candidate_key,
+            self.discovery_source,
+            self.evidence_pointer,
+        )
+
 
 @dataclass(frozen=True)
 class CandidateRecord:
@@ -222,7 +231,7 @@ class CandidateRecord:
             first_seen_at=observation.observed_at,
             last_seen_at=observation.observed_at,
             occurrences=1,
-            dedup_keys=(observation.candidate_key,),
+            dedup_keys=(observation.observation_key,),
             rationale=rationale,
             rejection_reason=None,
             rights_state=rights_state,
@@ -240,6 +249,8 @@ class CandidateRecord:
     def observe(self, observation: CandidateObservation) -> "CandidateRecord":
         if observation.candidate_key != self.candidate_id:
             raise ValueError("observation does not converge onto this candidate")
+        if observation.observation_key in self.dedup_keys:
+            return self
         bumped_corroboration = min(self.score_components["corroboration"] + 0.1, 1.0)
         new_scores = MappingProxyType({**self.score_components, "corroboration": bumped_corroboration})
         return replace(
@@ -247,7 +258,7 @@ class CandidateRecord:
             occurrences=self.occurrences + 1,
             last_seen_at=observation.observed_at,
             score_components=new_scores,
-            dedup_keys=tuple(dict.fromkeys((*self.dedup_keys, observation.candidate_key))),
+            dedup_keys=(*self.dedup_keys, observation.observation_key),
         )
 
     def transition(self, new_status: str, *, rejection_reason: str | None = None) -> "CandidateRecord":
