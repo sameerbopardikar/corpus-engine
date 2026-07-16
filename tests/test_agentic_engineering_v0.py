@@ -10,6 +10,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from agentic_engineering_v0 import run_v0
+from corpus_discovery import DiscoveryEngine
+from corpus_engine_models import CandidateObservation
 
 
 class AgenticEngineeringV0Tests(unittest.TestCase):
@@ -18,7 +20,7 @@ class AgenticEngineeringV0Tests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.corpus_root = self.root / "corpus"
         self.state_root = self.root / "state"
-        self.output_root = self.root / "output"
+        self.output_root = self.corpus_root / "discovery" / "personal-v0"
         self.corpus_root.mkdir()
         (self.corpus_root / "index.md").write_text(
             "# Existing doctrine\n\nVerification and leases are already covered.\n",
@@ -125,6 +127,37 @@ class AgenticEngineeringV0Tests(unittest.TestCase):
         self.assertFalse(self.state_root.exists())
         self.assertFalse(self.output_root.exists())
         self.assertEqual(self.registry.read_bytes(), self.registry_before)
+
+    def test_foreign_ledger_candidate_does_not_crash_or_enter_seed_ranking(self):
+        engine = DiscoveryEngine(self.state_root / "discovery-ledger.jsonl")
+        engine.observe(
+            CandidateObservation.create(
+                domain="agentic-engineering",
+                entity_type="document",
+                canonical_url="https://example.com/foreign",
+                discovery_source="external:test",
+                evidence_pointer="https://example.com/evidence",
+                evidence_lane="production-reliability",
+                topics=("foreign-topic",),
+                observed_at="2026-07-16T00:00:00Z",
+            )
+        )
+
+        result = run_v0(
+            seed_path=self.seed,
+            corpus_root=self.corpus_root,
+            state_root=self.state_root,
+            output_root=self.output_root,
+            cycle_id="2026-07-16-personal-v0",
+            queue_top=2,
+        )
+
+        self.assertEqual(result["candidate_count"], 2)
+        self.assertNotIn(
+            "https://example.com/foreign",
+            [candidate["canonical_url"] for candidate in result["ranked_candidates"]],
+        )
+        self.assertTrue((self.output_root / "latest.json").exists())
 
 
 if __name__ == "__main__":

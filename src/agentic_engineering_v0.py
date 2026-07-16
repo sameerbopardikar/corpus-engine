@@ -42,11 +42,14 @@ def _safe_cycle_id(value: str) -> str:
 def _corpus_pages(corpus_root: Path) -> list[tuple[str, str]]:
     pages: list[tuple[str, str]] = []
     for path in sorted(corpus_root.rglob("*.md")):
+        relative = path.relative_to(corpus_root)
+        if relative.parts[:2] == ("discovery", "personal-v0"):
+            continue
         try:
             text = path.read_text(encoding="utf-8").lower()
         except (OSError, UnicodeDecodeError):
             continue
-        pages.append((str(path.relative_to(corpus_root)), text))
+        pages.append((str(relative), text))
     return pages
 
 
@@ -196,7 +199,15 @@ def run_v0(
     else:
         engine = DiscoveryEngine(state_root / "discovery-ledger.jsonl")
         ingest_candidate_seed(engine, bundle, source_ref=str(seed_path), dry_run=False)
-        records = list(engine.candidates.values())
+        seed_candidate_ids = {
+            observation.candidate_key
+            for observation in bundle.observations(source_ref=str(seed_path))
+        }
+        records = [
+            record
+            for record in engine.candidates.values()
+            if record.candidate_id in seed_candidate_ids
+        ]
 
     ranked = _rank_candidates(bundle, records, pages)
 
