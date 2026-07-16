@@ -302,7 +302,7 @@ class WorkItemTests(unittest.TestCase):
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
         leased = w.lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
-        done = leased.complete(owner="worker-1", lease_token="token-1", proof_receipt="receipts/verify/cand_abc.json", now=now)
+        done = leased.complete(owner="worker-1", lease_token="token-1", lease_generation=1, proof_receipt="receipts/verify/cand_abc.json", now=now)
         self.assertEqual(done.state, "done")
         self.assertIn("receipts/verify/cand_abc.json", done.proof_receipts)
 
@@ -312,7 +312,7 @@ class WorkItemTests(unittest.TestCase):
             score_components={}, budget_estimate=1.0, now=NOW,
         )
         with self.assertRaises(ValueError):
-            w.complete(owner="worker-1", lease_token="token-1", proof_receipt="receipts/verify/cand_abc.json", now=NOW)
+            w.complete(owner="worker-1", lease_token="token-1", lease_generation=0, proof_receipt="receipts/verify/cand_abc.json", now=NOW)
 
     def test_fail_sets_retry_after_and_moves_to_dead_letter_after_max_attempts(self):
         w = models.WorkItem.create(
@@ -324,7 +324,7 @@ class WorkItemTests(unittest.TestCase):
         for attempt in range(models.MAX_ATTEMPTS):
             moment = started + timedelta(seconds=attempt * 30)
             current = current.lease(owner="worker-1", ttl_seconds=60, now=moment, lease_token=f"token-{attempt}")
-            current = current.fail(owner="worker-1", lease_token=f"token-{attempt}", error="test failure", retry_after_seconds=30, now=moment)
+            current = current.fail(owner="worker-1", lease_token=f"token-{attempt}", lease_generation=attempt + 1, error="test failure", retry_after_seconds=30, now=moment)
         self.assertEqual(current.state, "dead_letter")
         self.assertEqual(current.attempts, models.MAX_ATTEMPTS)
 
@@ -335,8 +335,8 @@ class WorkItemTests(unittest.TestCase):
             score_components={}, budget_estimate=1.0, now=NOW,
         ).lease(owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         with self.assertRaises(ValueError):
-            leased.fail(owner="worker-1", lease_token="token-1", error="test failure", retry_after_seconds=0, now=now)
-        failed = leased.fail(owner="worker-1", lease_token="token-1", error="test failure", retry_after_seconds=30, now=now)
+            leased.fail(owner="worker-1", lease_token="token-1", lease_generation=1, error="test failure", retry_after_seconds=0, now=now)
+        failed = leased.fail(owner="worker-1", lease_token="token-1", lease_generation=1, error="test failure", retry_after_seconds=30, now=now)
         with self.assertRaises(ValueError):
             failed.lease(owner="worker-2", ttl_seconds=60, now=now + timedelta(seconds=29))
         self.assertEqual(

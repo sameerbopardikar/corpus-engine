@@ -146,6 +146,39 @@ class CanonicalizationAndInputTests(unittest.TestCase):
         self.assertEqual(plain.canonical_url, encoded.canonical_url)
         self.assertEqual(plain.candidate_key, encoded.candidate_key)
 
+    def test_ipv6_port_and_percent_canonicalization_is_safe(self):
+        expanded = observation(canonical_url="https://[0:0:0:0:0:0:0:1]/a")
+        compressed = observation(canonical_url="https://[::1]/a")
+        self.assertEqual(expanded.canonical_url, compressed.canonical_url)
+        self.assertEqual(expanded.candidate_key, compressed.candidate_key)
+        for invalid in (
+            "https://example.com:0/a",
+            "https://example.com/%",
+            "https://example.com/%GG",
+        ):
+            with self.assertRaises(ValueError):
+                observation(canonical_url=invalid)
+
+    def test_candidate_relational_invariants_and_schema_type_are_enforced(self):
+        obs = observation()
+        scores = {
+            "authority": 0.5,
+            "demonstrated_practice": 0.5,
+            "novelty": 0.5,
+            "relevance": 0.5,
+            "corroboration": 0.5,
+            "production_or_scientific_value": 0.5,
+            "cost": 0.5,
+        }
+        record = models.CandidateRecord.from_observation(obs, scores)
+        with self.assertRaises(ValueError):
+            replace(record, occurrences=99)
+        with self.assertRaises(ValueError):
+            replace(record, rejection_reason="stale reason")
+        for value in (obs, record, pending_work()):
+            with self.assertRaises(ValueError):
+                replace(value, schema_version=True)
+
     def test_relational_queue_invariants_hold_for_direct_construction(self):
         pending = pending_work()
         with self.assertRaises(ValueError):
@@ -154,6 +187,32 @@ class CanonicalizationAndInputTests(unittest.TestCase):
             replace(pending, state="dead_letter", attempts=0, last_error="failure")
         with self.assertRaises(ValueError):
             replace(pending, proof_receipts=("stale-receipt",))
+        with self.assertRaises(ValueError):
+            replace(
+                pending,
+                state="leased",
+                lease_owner="worker",
+                lease_token="token",
+                lease_generation=0,
+                lease_expires_at=models.iso(NOW + timedelta(seconds=60)),
+            )
+        with self.assertRaises(ValueError):
+            replace(
+                pending,
+                state="leased",
+                lease_owner="worker",
+                lease_token="token",
+                lease_generation=1,
+                lease_expires_at=pending.updated_at,
+            )
+        with self.assertRaises(ValueError):
+            replace(
+                pending,
+                state="dead_letter",
+                attempts=models.MAX_ATTEMPTS + 1,
+                lease_generation=models.MAX_ATTEMPTS + 1,
+                last_error="overrun",
+            )
 
     def test_non_finite_budget_blank_key_and_naive_now_are_rejected(self):
         with self.assertRaises(ValueError):
@@ -168,17 +227,17 @@ class LeaseFencingTests(unittest.TestCase):
     def test_wrong_owner_or_token_cannot_complete(self):
         leased = pending_work().lease(owner="worker-a", ttl_seconds=60, now=NOW, lease_token="token-a")
         with self.assertRaises(ValueError):
-            leased.complete(owner="worker-b", lease_token="token-a", proof_receipt="receipt.json", now=NOW)
+            leased.complete(owner="worker-b", lease_token="token-a", lease_generation=1, proof_receipt="receipt.json", now=NOW)
         with self.assertRaises(ValueError):
-            leased.complete(owner="worker-a", lease_token="wrong", proof_receipt="receipt.json", now=NOW)
+            leased.complete(owner="worker-a", lease_token="wrong", lease_generation=1, proof_receipt="receipt.json", now=NOW)
 
     def test_expired_lease_cannot_complete_or_fail(self):
         leased = pending_work().lease(owner="worker-a", ttl_seconds=1, now=NOW, lease_token="token-a")
         expired = NOW + timedelta(seconds=1)
         with self.assertRaises(ValueError):
-            leased.complete(owner="worker-a", lease_token="token-a", proof_receipt="receipt.json", now=expired)
+            leased.complete(owner="worker-a", lease_token="token-a", lease_generation=1, proof_receipt="receipt.json", now=expired)
         with self.assertRaises(ValueError):
-            leased.fail(owner="worker-a", lease_token="token-a", error="timeout", now=expired)
+            leased.fail(owner="worker-a", lease_token="token-a", lease_generation=1, error="timeout", now=expired)
 
     def test_lifecycle_timestamps_cannot_move_backward(self):
         created = pending_work(now=NOW)
@@ -199,6 +258,7 @@ class LeaseFencingTests(unittest.TestCase):
             leased.complete(
                 owner="worker-a",
                 lease_token="token-a",
+                lease_generation=1,
                 proof_receipt="receipt.json",
                 now=NOW + timedelta(seconds=5),
             )
@@ -206,6 +266,7 @@ class LeaseFencingTests(unittest.TestCase):
             leased.fail(
                 owner="worker-a",
                 lease_token="token-a",
+                lease_generation=1,
                 error="backdated",
                 now=NOW + timedelta(seconds=5),
             )
@@ -220,8 +281,39 @@ class LeaseFencingTests(unittest.TestCase):
             lease_token="token-b",
         )
         with self.assertRaises(ValueError):
-            second.complete(owner="worker-a", lease_token="token-a", proof_receipt="stale.json", now=NOW + timedelta(seconds=3))
-        done = second.complete(owner="worker-b", lease_token="token-b", proof_receipt="fresh.json", now=NOW + timedelta(seconds=3))
+            second.complete(owner="worker-a", lease_token="token-a", lease_generation=1, proof_receipt="stale.json", now=NOW + timedelta(seconds=3))
+        done = second.complete(owner="worker-b", lease_token="token-b", lease_generation=2, proof_receipt="fresh.json", now=NOW + timedelta(seconds=3))
+        self.assertEqual(done.state, "done")
+
+    def test_generation_fences_reused_owner_and_token(self):
+        first = pending_work().lease(
+            owner="worker",
+            ttl_seconds=1,
+            now=NOW,
+            lease_token="reused-token",
+        )
+        released = first.release_if_expired(now=NOW + timedelta(seconds=1))
+        second = released.lease(
+            owner="worker",
+            ttl_seconds=60,
+            now=NOW + timedelta(seconds=2),
+            lease_token="reused-token",
+        )
+        with self.assertRaises(ValueError):
+            second.complete(
+                owner="worker",
+                lease_token="reused-token",
+                lease_generation=1,
+                proof_receipt="stale.json",
+                now=NOW + timedelta(seconds=3),
+            )
+        done = second.complete(
+            owner="worker",
+            lease_token="reused-token",
+            lease_generation=2,
+            proof_receipt="fresh.json",
+            now=NOW + timedelta(seconds=3),
+        )
         self.assertEqual(done.state, "done")
 
     def test_retry_metadata_clears_when_released_and_failure_context_is_retained(self):
@@ -229,6 +321,7 @@ class LeaseFencingTests(unittest.TestCase):
         pending = first.fail(
             owner="worker-a",
             lease_token="token-a",
+            lease_generation=1,
             error="network timeout",
             retry_after_seconds=30,
             now=NOW,
@@ -243,6 +336,7 @@ class LeaseFencingTests(unittest.TestCase):
         done = leased.complete(
             owner="worker-b",
             lease_token="token-b",
+            lease_generation=2,
             proof_receipt="receipt.json",
             now=NOW + timedelta(seconds=31),
         )
@@ -251,11 +345,11 @@ class LeaseFencingTests(unittest.TestCase):
 
     def test_terminal_item_rejects_every_further_transition(self):
         leased = pending_work().lease(owner="worker-a", ttl_seconds=60, now=NOW, lease_token="token-a")
-        done = leased.complete(owner="worker-a", lease_token="token-a", proof_receipt="receipt.json", now=NOW)
+        done = leased.complete(owner="worker-a", lease_token="token-a", lease_generation=1, proof_receipt="receipt.json", now=NOW)
         for operation in (
             lambda: done.lease(owner="worker-b", ttl_seconds=60, now=NOW, lease_token="token-b"),
-            lambda: done.complete(owner="worker-a", lease_token="token-a", proof_receipt="again.json", now=NOW),
-            lambda: done.fail(owner="worker-a", lease_token="token-a", error="again", now=NOW),
+            lambda: done.complete(owner="worker-a", lease_token="token-a", lease_generation=1, proof_receipt="again.json", now=NOW),
+            lambda: done.fail(owner="worker-a", lease_token="token-a", lease_generation=1, error="again", now=NOW),
         ):
             with self.assertRaises(ValueError):
                 operation()

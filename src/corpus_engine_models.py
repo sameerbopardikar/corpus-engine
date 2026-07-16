@@ -8,6 +8,7 @@ copied, and every record has an explicit strict-JSON codec.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import math
 import posixpath
@@ -94,6 +95,9 @@ _PERCENT_ESCAPE = re.compile(r"%([0-9A-Fa-f]{2})")
 
 
 def _normalize_percent_encoding(value: str) -> str:
+    if re.search(r"%(?![0-9A-Fa-f]{2})", value):
+        raise ValueError("URL contains an invalid percent escape")
+
     def replace_escape(match: re.Match[str]) -> str:
         byte = int(match.group(1), 16)
         if byte in _UNRESERVED_URL_BYTES:
@@ -114,15 +118,21 @@ def _normalize_url(url: str) -> str:
     host = parsed.hostname
     assert host is not None
     if ":" in host:
-        normalized_host = f"[{host.lower()}]"
+        try:
+            normalized_host = f"[{ipaddress.IPv6Address(host).compressed}]"
+        except ipaddress.AddressValueError as exc:
+            raise ValueError("canonical_url has an invalid IPv6 host") from exc
     else:
         normalized_host = host.encode("idna").decode("ascii").lower()
     try:
         port = parsed.port
     except ValueError as exc:
         raise ValueError("canonical_url has an invalid port") from exc
-    if port and not ((scheme == "https" and port == 443) or (scheme == "http" and port == 80)):
-        normalized_host = f"{normalized_host}:{port}"
+    if port is not None:
+        if not 1 <= port <= 65535:
+            raise ValueError("canonical_url port must be in range 1..65535")
+        if not ((scheme == "https" and port == 443) or (scheme == "http" and port == 80)):
+            normalized_host = f"{normalized_host}:{port}"
     path = _normalize_percent_encoding(parsed.path or "/")
     normalized_path = posixpath.normpath(path)
     if path.startswith("/") and not normalized_path.startswith("/"):
@@ -186,8 +196,8 @@ class CandidateObservation:
     observed_at: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != SCHEMA_VERSION:
-            raise ValueError(f"unsupported schema_version: {self.schema_version}")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version != SCHEMA_VERSION:
+            raise ValueError(f"unsupported schema_version: {self.schema_version!r}")
         object.__setattr__(self, "domain", _require_text(self.domain, "domain"))
         entity_type = _require_text(self.entity_type, "entity_type")
         if entity_type not in ENTITY_TYPES:
@@ -273,8 +283,8 @@ class CandidateRecord:
     rights_state: str = "unknown"
 
     def __post_init__(self) -> None:
-        if self.schema_version != SCHEMA_VERSION:
-            raise ValueError(f"unsupported schema_version: {self.schema_version}")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version != SCHEMA_VERSION:
+            raise ValueError(f"unsupported schema_version: {self.schema_version!r}")
         domain = _require_text(self.domain, "domain")
         entity_type = _require_text(self.entity_type, "entity_type")
         if entity_type not in ENTITY_TYPES:
@@ -295,11 +305,13 @@ class CandidateRecord:
         dedup_keys = _text_tuple(self.dedup_keys, "dedup_keys", allow_empty=False)
         if len(dedup_keys) != len(set(dedup_keys)):
             raise ValueError("dedup_keys must be unique")
+        if self.occurrences != len(dedup_keys):
+            raise ValueError("occurrences must equal the number of distinct observation keys")
         rejection_reason = self.rejection_reason
         if status == "rejected":
             rejection_reason = _require_text(rejection_reason, "rejection_reason")
         elif rejection_reason is not None:
-            rejection_reason = _require_text(rejection_reason, "rejection_reason")
+            raise ValueError("only rejected candidates may retain rejection_reason")
         object.__setattr__(self, "domain", domain)
         object.__setattr__(self, "entity_type", entity_type)
         object.__setattr__(self, "canonical_url", canonical_url)
@@ -438,8 +450,8 @@ class WorkItem:
     updated_at: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != SCHEMA_VERSION:
-            raise ValueError(f"unsupported schema_version: {self.schema_version}")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version != SCHEMA_VERSION:
+            raise ValueError(f"unsupported schema_version: {self.schema_version!r}")
         domain = _require_text(self.domain, "domain")
         candidate_id = _require_text(self.candidate_id, "candidate_id")
         action = _require_text(self.action, "action")
@@ -473,8 +485,14 @@ class WorkItem:
         last_error = self.last_error
         if state in {"pending", "leased"} and self.attempts >= MAX_ATTEMPTS:
             raise ValueError(f"{state} work cannot have exhausted attempts")
-        if state == "dead_letter" and self.attempts < MAX_ATTEMPTS:
-            raise ValueError("dead-letter work requires exhausted attempts")
+        if state == "dead_letter" and self.attempts != MAX_ATTEMPTS:
+            raise ValueError("dead-letter work requires exactly MAX_ATTEMPTS")
+        if state in {"leased", "done"} and self.lease_generation <= self.attempts:
+            raise ValueError(f"{state} work requires a fresh lease generation")
+        if state in {"pending", "dead_letter"} and self.lease_generation < self.attempts:
+            raise ValueError("lease_generation cannot trail attempts")
+        if len(proof_receipts) != len(set(proof_receipts)):
+            raise ValueError("proof_receipts must be unique")
         if state != "done" and proof_receipts:
             raise ValueError(f"{state} work cannot retain proof receipts")
         if retry_after is not None and self.attempts == 0:
@@ -488,6 +506,8 @@ class WorkItem:
                 _require_text(lease_expires_at, "lease_expires_at"),
                 "lease_expires_at",
             )
+            if _parse_required_iso(lease_expires_at, "lease_expires_at") <= _parse_required_iso(updated_at, "updated_at"):
+                raise ValueError("lease_expires_at must be later than updated_at")
             if retry_after is not None:
                 raise ValueError("leased work cannot retain retry_after")
         else:
@@ -495,6 +515,8 @@ class WorkItem:
                 raise ValueError(f"{state} work cannot retain lease metadata")
             if retry_after is not None:
                 retry_after = _canonical_timestamp(retry_after, "retry_after")
+                if _parse_required_iso(retry_after, "retry_after") <= _parse_required_iso(updated_at, "updated_at"):
+                    raise ValueError("retry_after must be later than updated_at")
         if state == "done":
             if not proof_receipts:
                 raise ValueError("done work requires at least one proof receipt")
@@ -606,13 +628,26 @@ class WorkItem:
             updated_at=iso(moment),
         )
 
-    def _validate_active_lease(self, *, owner: str, lease_token: str, now: datetime | None) -> datetime:
+    def _validate_active_lease(
+        self,
+        *,
+        owner: str,
+        lease_token: str,
+        lease_generation: int,
+        now: datetime | None,
+    ) -> datetime:
         if self.state != "leased":
             raise ValueError(f"work item is not leased: {self.state!r}")
         if _require_text(owner, "owner") != self.lease_owner:
             raise ValueError("lease owner does not match current lease")
         if _require_text(lease_token, "lease_token") != self.lease_token:
             raise ValueError("lease token does not match current lease")
+        if (
+            not isinstance(lease_generation, int)
+            or isinstance(lease_generation, bool)
+            or lease_generation != self.lease_generation
+        ):
+            raise ValueError("lease generation does not match current lease")
         moment = self._transition_moment(now)
         if self.is_lease_expired(now=moment):
             raise ValueError("lease has expired")
@@ -642,10 +677,16 @@ class WorkItem:
         *,
         owner: str,
         lease_token: str,
+        lease_generation: int,
         proof_receipt: str,
         now: datetime | None = None,
     ) -> "WorkItem":
-        moment = self._validate_active_lease(owner=owner, lease_token=lease_token, now=now)
+        moment = self._validate_active_lease(
+            owner=owner,
+            lease_token=lease_token,
+            lease_generation=lease_generation,
+            now=now,
+        )
         receipt = _require_text(proof_receipt, "proof_receipt")
         return replace(
             self,
@@ -663,11 +704,17 @@ class WorkItem:
         *,
         owner: str,
         lease_token: str,
+        lease_generation: int,
         error: str,
         retry_after_seconds: int = 60,
         now: datetime | None = None,
     ) -> "WorkItem":
-        moment = self._validate_active_lease(owner=owner, lease_token=lease_token, now=now)
+        moment = self._validate_active_lease(
+            owner=owner,
+            lease_token=lease_token,
+            lease_generation=lease_generation,
+            now=now,
+        )
         if not isinstance(retry_after_seconds, int) or isinstance(retry_after_seconds, bool) or retry_after_seconds <= 0:
             raise ValueError("retry_after_seconds must be a positive integer")
         attempts = self.attempts + 1
