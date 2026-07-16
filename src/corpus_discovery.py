@@ -11,6 +11,7 @@ import fcntl
 import json
 import math
 import os
+import stat
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -44,6 +45,19 @@ class DiscoveryLedgerError(Exception):
 
 class LedgerCorruptionError(DiscoveryLedgerError):
     """Raised when a ledger cannot be replayed safely."""
+
+
+def _ensure_private_regular_file(path: Path) -> None:
+    flags = os.O_CREAT | os.O_RDWR
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise DiscoveryLedgerError(f"ledger path is not a regular file: {path}")
+        os.fchmod(descriptor, 0o600)
+    finally:
+        os.close(descriptor)
 
 
 def serialize_observation(observation: CandidateObservation) -> dict[str, Any]:
@@ -135,15 +149,9 @@ class DiscoveryLedger:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.path.parent, 0o700)
-        if not self.path.exists():
-            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-            os.close(fd)
-        os.chmod(self.path, 0o600)
+        _ensure_private_regular_file(self.path)
         self.lock_path = self.path.with_suffix(self.path.suffix + ".lock")
-        if not self.lock_path.exists():
-            fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-            os.close(fd)
-        os.chmod(self.lock_path, 0o600)
+        _ensure_private_regular_file(self.lock_path)
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
