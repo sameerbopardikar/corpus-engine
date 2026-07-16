@@ -233,7 +233,6 @@ def run_v0(
     if not dry_run:
         encoded = json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
         _atomic_write(output_root / f"cycle-{safe_cycle}.json", encoded)
-        _atomic_write(output_root / f"cycle-{safe_cycle}.md", _render_markdown(result))
         _atomic_write(output_root / "latest.json", encoded)
         _atomic_write(output_root / "latest.md", _render_markdown(result))
     return result
