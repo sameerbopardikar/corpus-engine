@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "domain": "agentic-engineering",
+  "status": "candidate-seed-not-promoted",
+  "generated_at": "2026-07-16T00:00:00Z",
+  "policy": "Candidate metadata and suggested scores only. The discovery ledger must verify canonical locators and rights before promotion or deep acquisition.",
+  "candidates": [
+    {
+      "id": "metr-time-horizons",
+      "entity_type": "document",
+      "canonical_url": "https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/",
+      "source_type": "web_document",
+      "evidence_lane": "scientific-evaluation",
+      "authority_tier": "A2",
+      "refresh_class": "fast",
+      "topics": ["long-horizon", "task-duration", "autonomy", "forecasting"],
+      "related_locators": ["https://arxiv.org/abs/2503.14499", "https://github.com/metr/task-standard"]
+    },
+    {
+      "id": "metr-re-bench",
+      "entity_type": "benchmark",
+      "canonical_url": "https://github.com/METR/RE-Bench",
+      "source_type": "github_repository",
+      "evidence_lane": "scientific-evaluation",
+      "authority_tier": "A2",
+      "refresh_class": "weekly",
+      "topics": ["long-horizon", "research-engineering", "human-baselines", "scaffolding"],
+      "related_locators": ["https://arxiv.org/abs/2411.15114"]
+    },
+    {
+      "id": "terminal-bench-3",
+      "entity_type": "benchmark",
+      "canonical_url": "https://github.com/harbor-framework/terminal-bench-3",
+      "source_type": "github_repository",
+      "evidence_lane": "scientific-evaluation",
+      "authority_tier": "A2",
+      "refresh_class": "fast",
+      "topics": ["terminal-agents", "environment-control", "verification", "long-horizon"]
+    },
+    {
+      "id": "tau2-bench",
+      "entity_type": "benchmark",
+      "canonical_url": "https://github.com/sierra-research/tau2-bench",
+      "source_type": "github_repository",
+      "evidence_lane": "scientific-evaluation",
+      "authority_tier": "A2",
+      "refresh_class": "fast",
+      "topics": ["tool-agents", "user-interaction", "policy-compliance", "stateful-dialogue"]
+    },
+    {
+      "id": "agentdojo",
+      "entity_type": "benchmark",
+      "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+      "source_type": "github_repository",
+      "evidence_lane": "security-evaluation",
+      "authority_tier": "A2",
+      "refresh_class": "weekly",
+      "topics": ["prompt-injection", "tool-security", "data-exfiltration", "defenses"],
+      "related_locators": ["https://arxiv.org/abs/2406.13352"]
+    },
+    {
+      "id": "simon-willison-agentic-engineering-patterns",
+      "entity_type": "document",
+      "canonical_url": "https://simonwillison.net/2026/Feb/23/agentic-engineering-patterns/",
+      "source_type": "web_document",
+      "evidence_lane": "practitioner-implementation",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["coding-agents", "tdd", "verification", "asynchronous-research"]
+    },
+    {
+      "id": "openhands",
+      "entity_type": "repository",
+      "canonical_url": "https://github.com/OpenHands/OpenHands",
+      "source_type": "github_repository",
+      "evidence_lane": "implementation-research",
+      "authority_tier": "A1",
+      "refresh_class": "fast",
+      "topics": ["software-agents", "verification", "sdk", "production-scaling"],
+      "related_locators": ["https://arxiv.org/abs/2407.16741"]
+    },
+    {
+      "id": "aider",
+      "entity_type": "repository",
+      "canonical_url": "https://github.com/Aider-AI/aider",
+      "source_type": "github_repository",
+      "evidence_lane": "practitioner-implementation",
+      "authority_tier": "A1",
+      "refresh_class": "fast",
+      "topics": ["coding-agents", "edit-formats", "repository-maps", "benchmarks"]
+    },
+    {
+      "id": "anthropic-multi-agent-research-system",
+      "entity_type": "document",
+      "canonical_url": "https://www.anthropic.com/engineering/multi-agent-research-system",
+      "source_type": "web_document",
+      "evidence_lane": "production-architecture",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["orchestrator-worker", "parallel-search", "context-isolation", "synthesis"]
+    },
+    {
+      "id": "anthropic-long-running-agent-harnesses",
+      "entity_type": "document",
+      "canonical_url": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents",
+      "source_type": "web_document",
+      "evidence_lane": "production-reliability",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["context-rollover", "resumability", "incremental-commits", "false-completion"]
+    },
+    {
+      "id": "openai-harness-engineering",
+      "entity_type": "document",
+      "canonical_url": "https://openai.com/index/harness-engineering/",
+      "source_type": "web_document",
+      "evidence_lane": "production-architecture",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["harnesses", "verifiers", "acceptance-criteria", "human-attention"]
+    },
+    {
+      "id": "cursor-cloud-agent-lessons",
+      "entity_type": "document",
+      "canonical_url": "https://cursor.com/blog/cloud-agent-lessons",
+      "source_type": "web_document",
+      "evidence_lane": "production-reliability",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["durable-execution", "environment-fidelity", "sandbox-lifecycle", "recovery"]
+    },
+    {
+      "id": "github-copilot-review-regression",
+      "entity_type": "document",
+      "canonical_url": "https://github.blog/ai-and-ml/github-copilot/better-tools-made-copilot-code-review-worse-heres-how-we-actually-improved-it/",
+      "source_type": "web_document",
+      "evidence_lane": "production-reliability",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["regression", "offline-evals", "production-behavior", "rollback"]
+    },
+    {
+      "id": "invariant-github-mcp-vulnerability",
+      "entity_type": "document",
+      "canonical_url": "https://invariantlabs.ai/blog/mcp-github-vulnerability",
+      "source_type": "web_document",
+      "evidence_lane": "security-incident",
+      "authority_tier": "A2",
+      "refresh_class": "incident",
+      "topics": ["indirect-prompt-injection", "mcp", "exfiltration", "least-privilege"]
+    },
+    {
+      "id": "invariant-mcp-tool-poisoning",
+      "entity_type": "document",
+      "canonical_url": "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks",
+      "source_type": "web_document",
+      "evidence_lane": "security-incident",
+      "authority_tier": "A2",
+      "refresh_class": "incident",
+      "topics": ["tool-poisoning", "tool-shadowing", "supply-chain", "credential-exfiltration"]
+    },
+    {
+      "id": "pagerduty-sre-agent",
+      "entity_type": "document",
+      "canonical_url": "https://www.pagerduty.com/eng/context-over-cleverness-building-pagerdutys-sre-agent/",
+      "source_type": "web_document",
+      "evidence_lane": "production-deployment",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["sre-agents", "specialist-decomposition", "evidence-grounding", "safe-escalation"]
+    },
+    {
+      "id": "gray-cheriton-leases",
+      "entity_type": "paper",
+      "canonical_url": "https://doi.org/10.1145/74850.74870",
+      "source_type": "scholarly_work",
+      "evidence_lane": "foundational",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["leases", "work-ownership", "expiry", "duplicate-execution"]
+    },
+    {
+      "id": "garcia-molina-salem-sagas",
+      "entity_type": "paper",
+      "canonical_url": "https://doi.org/10.1145/38713.38742",
+      "source_type": "scholarly_work",
+      "evidence_lane": "foundational",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["sagas", "compensation", "long-lived-transactions", "partial-failure"]
+    },
+    {
+      "id": "saltzer-reed-clark-end-to-end",
+      "entity_type": "paper",
+      "canonical_url": "https://doi.org/10.1145/357401.357402",
+      "source_type": "scholarly_work",
+      "evidence_lane": "foundational",
+      "authority_tier": "A1",
+      "refresh_class": "frozen",
+      "topics": ["end-to-end-verification", "reliability", "responsibility-boundaries"]
+    },
+    {
+      "id": "armstrong-reliable-systems-thesis",
+      "entity_type": "paper",
+      "canonical_url": "https://erlang.org/download/armstrong_thesis_2003.pdf",
+      "source_type": "scholarly_work",
+      "evidence_lane": "foundational",
+      "authority_tier": "A2",
+      "refresh_class": "frozen",
+      "topics": ["actors", "supervision", "isolation", "crash-recovery"]
+    }
+  ]
+}

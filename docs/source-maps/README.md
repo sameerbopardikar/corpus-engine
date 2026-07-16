@@ -7,6 +7,7 @@ These are research inputs for the first self-expanding Agentic Engineering corpu
 - `scientific-benchmark-foundational.md` — scientific evaluations, benchmarks, and distributed-systems foundations.
 - `creator-operator-expansion.md` — builder, maintainer, researcher, and operator graph.
 - `production-evidence-postmortems.md` — production reports, incidents, postmortems, reliability, and security evidence.
+- `agentic-engineering-seed-candidates.json` — the first 20 normalized, deduplicated P0 candidates. These remain unpromoted until the engine verifies them.
 
 ## Promotion rule
 
