@@ -6,9 +6,16 @@ REPORT_DIR="$CORPUS_ROOT/agentic-engineering/discovery/personal-v0"
 CYCLE_ID="$(date -u +%F)-personal-v0"
 SHADOW_CYCLE_ID="shadow-20260717-agentdojo-v1b"
 RESULT="$(mktemp)"
+INTAKE_RESULT="$(mktemp)"
 SHADOW_RESULT="$(mktemp)"
 SYNC_LOG="$(mktemp)"
-trap 'rm -f "$RESULT" "$SHADOW_RESULT" "$SYNC_LOG"' EXIT
+trap 'rm -f "$RESULT" "$INTAKE_RESULT" "$SHADOW_RESULT" "$SYNC_LOG"' EXIT
+
+# The existing cycle is the sole recurring processor for private intake. Suggestions
+# become discovery cards; rights-cleared files become provenance-linked source cards.
+/usr/local/bin/corpus-intake process \
+  --all \
+  --corpus-root "$CORPUS_ROOT/agentic-engineering" > "$INTAKE_RESULT"
 
 /usr/local/bin/agentic-engineering-corpus \
   --cycle-id "$CYCLE_ID" \
@@ -43,6 +50,9 @@ git add \
   "$REPORT_DIR/latest.md" \
   "$REPORT_DIR/latest.json" \
   "$REPORT_DIR/cycle-$CYCLE_ID.json"
+if [[ -d "$CORPUS_ROOT/agentic-engineering/intake" ]]; then
+  git add --all "$CORPUS_ROOT/agentic-engineering/intake"
+fi
 
 changed=false
 if ! git diff --cached --quiet; then
