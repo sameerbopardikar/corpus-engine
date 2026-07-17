@@ -8,7 +8,7 @@
   "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
   "status": "executing",
   "terminal_semantics": "turn_finished_work_incomplete_durable_next_action",
-  "current_phase": "independent-p1-discovery-and-adapter-remediation",
+  "current_phase": "independent-p1-adapter-remediation",
   "authority": "single-writer controller in the named worktree",
   "production_boundary": "No Expert/Percival production mutation. Reversible backed-up deployment to the existing corpus-engine-cycle is allowed after current-byte tests and live shadow verification.",
   "completion_test": "A real unattended cycle discovers or selects a public rights-clear evidence candidate, acquires and preserves it, writes a GBrain corpus source artifact, emits a versioned doctrine decision, passes deterministic integrity/retrieval/lineage evaluations, records a receipt and selects the next gap; tests, source-scoped retrieval, dashboard readback, scheduler and rollback are verified.",
@@ -21,16 +21,17 @@
     "bounded X discovery-signal ingestion with exact post preservation, duplicate-thread convergence and hard doctrine ineligibility",
     "deterministic budgeted priority policy with rights fail-closed admission, item/token/cost caps, no-delta suppression, retry/backoff and bounded starvation control",
     "priority P1 remediation with canonical request preimages, deterministic reservation replay, coherent-tamper rejection and physical no-op metadata preservation",
-    "discovery replay validation for every work transition plus durable automatic expired-lease recovery before selection"
+    "discovery replay validation for every work transition plus durable automatic expired-lease recovery before selection",
+    "candidate/domain/rights queue admission, artifact-backed authorized completion proof, replay-time proof revalidation and exact append rollback/readback"
   ],
-  "next_action": "Add failing adversarial tests and minimal implementation for artifact-backed verifier-authorized completion proof, candidate/domain/rights admission, and atomic ledger append rollback/readback; then close adapter rights/cursor/pending-caption/content-addressed provenance/minimum-content findings before doctrine events.",
+  "next_action": "Close adapter P1 findings with failing tests for cursor transport/content revision separation, pending-caption state, content-addressed raw provenance and minimum-content rejection; then begin versioned doctrine events.",
   "last_verified": {
-    "commit": "1a68f6f9e19fe2abf2c3d3efef4b4715a077fb94",
-    "diff_sha256": "fd36e8c5dbc5c3f68438b626449c719adb580caf929894cd300ef0d770feccf5",
-    "focused_tests": "python3 -m unittest tests/test_corpus_discovery.py tests/test_corpus_discovery_adversarial.py -v => 31 passed",
-    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 148 passed",
+    "commit": "fe76653a819dc5161b941627dd73911db5aa9b9c",
+    "diff_sha256": "3a721ab94c6b646c5617ba74adf4fbd961fca3073961baff99d36aaefa372d43",
+    "focused_tests": "python3 -m unittest tests/test_corpus_discovery.py tests/test_corpus_discovery_adversarial.py -v => 36 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 153 passed",
     "static": "python3 -m compileall -q src tests && git diff --check && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed",
-    "receipt": ".hermes/receipts/2026-07-17T072059Z-discovery-replay-lease-recovery.json"
+    "receipt": ".hermes/receipts/2026-07-17T073807Z-discovery-admission-authorized-proof.json"
   },
   "manager_update_key": "budgeted-priority-policy-complete",
   "manager_update": {
@@ -39,5 +40,5 @@
     "slack_ts": "1784269929.754339",
     "delivered_at": "2026-07-17T06:32:22Z"
   },
-  "updated_at": "2026-07-17T07:20:59Z"
+  "updated_at": "2026-07-17T07:38:07Z"
 }

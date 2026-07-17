@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "slice": "discovery-admission-authorized-proof-and-append-rollback",
+  "recorded_at": "2026-07-17T07:38:07Z",
+  "commit": "fe76653a819dc5161b941627dd73911db5aa9b9c",
+  "commit_diff_sha256": "3a721ab94c6b646c5617ba74adf4fbd961fca3073961baff99d36aaefa372d43",
+  "red_evidence": {
+    "commands": [
+      "python3 -m unittest tests/test_corpus_discovery_adversarial.py -v",
+      "python3 -m unittest tests.test_corpus_discovery_adversarial.DiscoveryAdversarialTests.test_replay_rejects_completion_from_verifier_outside_authorized_set -v",
+      "python3 -m unittest tests.test_corpus_discovery_adversarial.DiscoveryAdversarialTests.test_replay_revalidates_receipt_and_artifact_bytes -v"
+    ],
+    "failures": [
+      "fsync failure left an appended event instead of restoring exact prior bytes",
+      "unknown candidates and rights-ineligible acquisition could be enqueued",
+      "plain receipt strings completed work without verifier authorization or artifact hash validation",
+      "replay accepted a forged verifier identity and post-completion artifact tampering"
+    ]
+  },
+  "implementation": [
+    "candidate observations now persist explicit validated rights_state without silent rights escalation",
+    "work enqueue requires an existing same-domain candidate; acquire/normalize/synthesize require public_rights_clear",
+    "completion requires a strict absolute-path JSON receipt from an authorized verifier bound to work/candidate/action and a regular non-symlink artifact SHA-256",
+    "completion events persist receipt and artifact hashes plus verifier identity; replay reopens and re-hashes both durable files",
+    "ledger append records its prior byte boundary, performs fsync plus strict readback, and truncates to exact prior bytes on write/fsync/readback failure"
+  ],
+  "verification": {
+    "focused": "python3 -m unittest tests/test_corpus_discovery.py tests/test_corpus_discovery_adversarial.py -v => 36 passed",
+    "full": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 153 passed",
+    "static": "git diff --check && python3 -m compileall -q src tests && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed"
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_blast returned not_found and code_callers returned not_built for DiscoveryEngine.complete_work, DiscoveryEngine.enqueue_work and DiscoveryLedger.append",
+    "native_inspection": "repository search found enqueue_work/complete_work consumers only in discovery tests and V0 paths; seed loading uses observe, and all direct queue tests were migrated to real candidate identities and durable proof fixtures"
+  },
+  "closed_findings": [
+    "artifact-backed verifier-authorized completion proof",
+    "candidate/domain/rights admission at work enqueue",
+    "atomic append rollback and strict readback under injected fsync/readback failure",
+    "replay-time verifier and external artifact tamper detection"
+  ],
+  "remaining_findings": [
+    "adapter rights/cursor/pending-caption/content-addressed provenance/minimum-content findings",
+    "versioned doctrine events and deterministic lineage",
+    "deterministic corpus evals and end-to-end shadow vertical"
+  ],
+  "next_action": "Close adapter P1 findings with failing tests for cursor transport/content revision separation, pending-caption state, content-addressed raw provenance and minimum-content rejection; then begin versioned doctrine events."
+}
