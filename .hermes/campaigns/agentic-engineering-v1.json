@@ -34,12 +34,12 @@
     "static": "python3 -m compileall -q src tests && git diff --check => passed",
     "receipt": ".hermes/receipts/2026-07-17T075156Z-adapter-p1-remediation.json"
   },
-  "manager_update_key": "budgeted-priority-policy-complete",
+  "manager_update_key": "adapter-p1-remediation-complete",
   "manager_update": {
     "delivered": true,
-    "delivery_id": "mgr_38a4a762377b4200",
-    "slack_ts": "1784269929.754339",
-    "delivered_at": "2026-07-17T06:32:22Z"
+    "delivery_id": "mgr_a7a1e4bb1f9c42b0",
+    "slack_ts": "1784274880.720229",
+    "delivered_at": "2026-07-17T07:54:41Z"
   },
-  "updated_at": "2026-07-17T07:51:56Z"
+  "updated_at": "2026-07-17T07:55:08Z"
 }
