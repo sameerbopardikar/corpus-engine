@@ -28,12 +28,12 @@
     "static": "python3 -m compileall -q src tests && git diff --check && git diff --cached --check => passed",
     "receipt": ".hermes/receipts/2026-07-17T061048Z-scientific-production-adapters.json"
   },
-  "manager_update_key": "core-refresh-adapters-complete",
+  "manager_update_key": "scientific-production-adapters-complete",
   "manager_update": {
     "delivered": true,
-    "delivery_id": "mgr_d44eca04363f4e56",
-    "slack_ts": "1784268202.421769",
-    "delivered_at": "2026-07-17T06:03:43Z"
+    "delivery_id": "mgr_7160593c0dfd495e",
+    "slack_ts": "1784268717.326579",
+    "delivered_at": "2026-07-17T06:12:10Z"
   },
-  "updated_at": "2026-07-17T06:10:48Z"
+  "updated_at": "2026-07-17T06:12:10Z"
 }
