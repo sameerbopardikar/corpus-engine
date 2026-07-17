@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SOURCE="$(readlink -f "${BASH_SOURCE[0]}")"
+HERE="$(cd "$(dirname "$SOURCE")/.." && pwd)"
 export PYTHONPATH="$HERE/src${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 "$HERE/src/corpus_intake.py" "$@"

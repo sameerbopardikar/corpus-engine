@@ -153,6 +153,19 @@ class IntakeStoreTest(unittest.TestCase):
         self.assertEqual(processed["status"], "processed")
         self.assertEqual(processed["receipt_id"], good_receipt["receipt_id"])
 
+    def test_cli_launcher_resolves_symlinked_release(self):
+        repo = Path(__file__).resolve().parents[1]
+        link_dir = Path(self.tmp.name) / "bin"
+        link_dir.mkdir()
+        launcher = link_dir / "corpus-intake"
+        launcher.symlink_to(repo / "scripts" / "corpus-intake")
+        completed = subprocess.run(
+            [str(launcher), "--root", str(Path(self.tmp.name) / "launcher-root"), "recent", "--limit", "1"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout), {"submissions": []})
+
     def test_suggestion_processes_as_candidate_not_evidence(self):
         receipt = self.store.submit_suggestion(title="Look at this", text="Maybe useful", source_url="https://example.com", origin={"platform": "web"})
         result = self.store.process_next(corpus_root=self.corpus)
