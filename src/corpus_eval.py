@@ -311,6 +311,7 @@ def evaluate_corpus(
 
     if not isinstance(doctrine_lineages, Mapping):
         raise EvaluationError("doctrine_lineages must be an object")
+    lineage_current_keys: set[str] = set()
     for requested_key, raw_lineage in sorted(doctrine_lineages.items()):
         key = _text(requested_key, "lineage key")
         if not isinstance(raw_lineage, Mapping):
@@ -324,11 +325,13 @@ def evaluate_corpus(
         current_key = lineage["current_key"]
         if current_key not in concepts_by_key:
             failures.add(f"lineage_current_missing:{key}")
+        else:
+            lineage_current_keys.add(current_key)
         if not isinstance(lineage["versions"], list) or not lineage["versions"]:
             failures.add(f"lineage_versions_missing:{key}")
-        if not isinstance(lineage["edges"], list) or not lineage["edges"]:
-            failures.add(f"lineage_edges_missing:{key}")
-        else:
+        if not isinstance(lineage["edges"], list):
+            failures.add(f"lineage_edges_invalid:{key}")
+        elif lineage["edges"]:
             snapshot_edge_keys = {
                 (edge.get("from"), edge.get("to"), edge.get("relation"), edge.get("recorded_at"))
                 for edge in snapshot["lineage_edges"] if isinstance(edge, Mapping)
@@ -339,6 +342,8 @@ def evaluate_corpus(
                 ) not in snapshot_edge_keys:
                     failures.add(f"lineage_edge_unresolved:{key}")
                     break
+    for concept_key in sorted(set(concepts_by_key) - lineage_current_keys):
+        failures.add(f"lineage_missing:{concept_key}")
 
     contradiction_groups: dict[str, dict[str, set[str]]] = {}
     for row in rows:

@@ -228,6 +228,17 @@ class CorpusEvaluationTests(unittest.TestCase):
         self.assertIn("dangling_alias:dangling", report["failures"])
         self.assertIn("lineage_versions_missing:verification-loops", report["failures"])
 
+    def test_every_current_concept_requires_lineage_but_new_proposal_needs_no_structural_edge(self):
+        report = self.run_eval(doctrine_lineages={})
+        self.assertIn("lineage_missing:verification-boundary", report["failures"])
+        lineages = copy.deepcopy(self.lineages)
+        lineages["verification-loops"]["edges"] = []
+        doctrine = copy.deepcopy(self.doctrine)
+        doctrine["lineage_edges"] = []
+        report = self.run_eval(doctrine_snapshot=doctrine, doctrine_lineages=lineages)
+        self.assertNotIn("lineage_edges_missing:verification-loops", report["failures"])
+        self.assertNotIn("lineage_missing:verification-boundary", report["failures"])
+
     def test_cost_caps_and_false_promotion_fail_closed(self):
         records = copy.deepcopy(self.records)
         records[0]["candidate_status"] = "promoted"
