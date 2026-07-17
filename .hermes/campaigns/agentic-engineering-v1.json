@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "objective": "Finish and verify the autonomous Agentic Engineering corpus engine V1 on the existing GBrain-native corpora source.",
+  "repo": "/root/workspace/self-expanding-corpus-engine",
+  "worktree": "/root/workspace/self-expanding-corpus-engine/.worktrees/hermes-agentic-corpus-personal-v0",
+  "branch": "agent/hermes-agentic-corpus-personal-v0",
+  "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
+  "status": "executing",
+  "terminal_semantics": "turn_finished_work_incomplete_durable_next_action",
+  "current_phase": "shared-adapters-and-public-acquisition",
+  "authority": "single-writer controller in the named worktree",
+  "production_boundary": "No Expert/Percival production mutation. Reversible backed-up deployment to the existing corpus-engine-cycle is allowed after current-byte tests and live shadow verification.",
+  "completion_test": "A real unattended cycle discovers or selects a public rights-clear evidence candidate, acquires and preserves it, writes a GBrain corpus source artifact, emits a versioned doctrine decision, passes deterministic integrity/retrieval/lineage evaluations, records a receipt and selects the next gap; tests, source-scoped retrieval, dashboard readback, scheduler and rollback are verified.",
+  "completed_slices": [
+    "durable discovery core and queue",
+    "strict seed loader and personal V0 ranker",
+    "shared immutable adapter contract with atomic observation/cursor commit"
+  ],
+  "next_action": "Port the existing web/GitHub/YouTube refresh behavior behind the shared adapter contract using failing regression tests first; verify raw and normalized hashes remain separate, moving GitHub refs resolve to immutable revisions, caption rollups deduplicate, and copied-live IndyDevDan projections do not change without a real source revision.",
+  "last_verified": {
+    "commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
+    "focused_tests": "python3 -m unittest tests/test_corpus_adapter_contract.py -v => 8 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 103 passed",
+    "static": "python3 -m compileall -q src tests && git diff --check => passed",
+    "receipt": ".hermes/receipts/2026-07-17T052809Z-shared-adapter-contract.json"
+  },
+  "manager_update_key": "kickoff-finish-line",
+  "updated_at": "2026-07-17T05:28:09Z"
+}
