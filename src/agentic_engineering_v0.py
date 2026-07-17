@@ -13,6 +13,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -170,6 +172,18 @@ def _atomic_write(path: Path, content: str) -> None:
     temp.write_text(content, encoding="utf-8")
     os.chmod(temp, 0o600)
     os.replace(temp, path)
+    setfacl = shutil.which("setfacl")
+    if setfacl:
+        subprocess.run(
+            [setfacl, "-m", "u:agentic-dashboard:rX,d:u:agentic-dashboard:rX", str(path.parent)],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            [setfacl, "-m", "u:agentic-dashboard:r--", str(path)],
+            capture_output=True,
+            check=True,
+        )
 
 
 def _render_markdown(result: dict[str, Any]) -> str:

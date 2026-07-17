@@ -1,4 +1,6 @@
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -95,6 +97,31 @@ class AgenticEngineeringV0Tests(unittest.TestCase):
         self.assertTrue((self.output_root / "latest.json").exists())
         self.assertTrue((self.output_root / "latest.md").exists())
         self.assertEqual(self.registry.read_bytes(), self.registry_before)
+
+    def test_written_reports_remain_readable_by_dashboard_service_account(self):
+        if not shutil.which("setfacl") or not shutil.which("runuser"):
+            self.skipTest("ACL verification tools unavailable")
+        if subprocess.run(["id", "agentic-dashboard"], capture_output=True).returncode != 0:
+            self.skipTest("agentic-dashboard account unavailable")
+        self.root.chmod(0o755)
+        self.corpus_root.chmod(0o755)
+        subprocess.run(
+            ["setfacl", "-m", "u:agentic-dashboard:rX,d:u:agentic-dashboard:rX", str(self.corpus_root)],
+            check=True,
+        )
+        run_v0(
+            seed_path=self.seed,
+            corpus_root=self.corpus_root,
+            state_root=self.state_root,
+            output_root=self.output_root,
+            cycle_id="dashboard-readable",
+            queue_top=0,
+        )
+        for report in ("latest.md", "latest.json", "cycle-dashboard-readable.json"):
+            subprocess.run(
+                ["runuser", "-u", "agentic-dashboard", "--", "test", "-r", str(self.output_root / report)],
+                check=True,
+            )
 
     def test_acquired_source_card_reconciles_dashboard_rights_and_status(self):
         source = self.corpus_root / "sources" / "gap.md"
