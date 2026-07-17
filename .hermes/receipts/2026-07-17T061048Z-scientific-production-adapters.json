@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-scientific-production-adapters-20260717T061048Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "scientific-and-production-adapters-complete",
+  "commit": "5b2c9d9bac8267742930c1c26057f38eafb38b82",
+  "diff_sha256": "dfb0be03d458e0259e78dd113cb1dfab43ae6ac9d74e1102ad8eb75213264efe",
+  "recorded_at": "2026-07-17T06:10:48Z",
+  "summary": "Added bounded arXiv, OpenAlex, benchmark, RSS and production-report adapters. Raw bytes are preserved before parsing; paper versions and immutable code revisions remain linked; abstracts, scholarly metadata and benchmark scores remain reported-not-verified claims; corrected benchmark forks preserve explicit lineage; vendor case studies, operator reports and independent postmortems remain distinct external-evidence classes with no doctrine promotion path.",
+  "files": [
+    "src/corpus_adapters/arxiv.py",
+    "src/corpus_adapters/openalex.py",
+    "src/corpus_adapters/benchmark.py",
+    "src/corpus_adapters/rss.py",
+    "src/corpus_adapters/postmortem.py",
+    "tests/test_arxiv_adapter.py",
+    "tests/test_openalex_adapter.py",
+    "tests/test_benchmark_adapter.py",
+    "tests/test_rss_adapter.py",
+    "tests/test_postmortem_adapter.py"
+  ],
+  "tdd": {
+    "red_missing_modules": "python3 -m unittest tests/test_arxiv_adapter.py tests/test_openalex_adapter.py tests/test_benchmark_adapter.py tests/test_rss_adapter.py tests/test_postmortem_adapter.py -v => 5 import errors for missing adapters",
+    "red_raw_authority": "python3 -m unittest tests/test_benchmark_adapter.py -v => response helper could override the revision in preserved raw bytes",
+    "focused_green": "python3 -m unittest tests/test_arxiv_adapter.py tests/test_openalex_adapter.py tests/test_benchmark_adapter.py tests/test_rss_adapter.py tests/test_postmortem_adapter.py tests/test_corpus_adapter_contract.py tests/test_web_adapter.py tests/test_github_adapter.py tests/test_youtube_adapter.py -v => 30 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 125 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --check && git diff --cached --check => passed"
+  },
+  "acceptance": {
+    "raw_bytes_preserved_and_authoritative": true,
+    "paper_version_and_immutable_code_identity_linked": true,
+    "abstracts_and_scholarly_metadata_reported_not_verified": true,
+    "benchmark_scores_reported_not_verified": true,
+    "corrected_forks_distinct_with_lineage": true,
+    "official_changelog_classified": true,
+    "vendor_operator_independent_production_evidence_distinct": true,
+    "external_evidence_not_sameer_adopted": true,
+    "registry_or_doctrine_promotion": false
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_blast returned not_found for the new adapter fetch symbols; code_callers/code_refs were not built for NormalizedObservation.",
+    "repository_search": "The five adapter classes are referenced only by their fixture-first test modules; all commit behavior routes through the already-tested AdapterRunner contract. No existing engine function was edited."
+  },
+  "external_acquisition": {
+    "deep_public_source_packages_today_this_slice": 0,
+    "fixtures_only": true,
+    "llm_calls": 0,
+    "estimated_model_cost_usd": 0.0
+  },
+  "production_effect": "None. No live corpus page, raw archive, GBrain source, scheduler, Expert/Percival behavior, credential, config or external system was mutated.",
+  "next_action": "Add bounded X discovery-signal ingestion with exact author/date/URL/text and linked-primary-source preservation; keep X-only claims unverified and doctrine-ineligible; then implement deterministic budget/ranking policy."
+}

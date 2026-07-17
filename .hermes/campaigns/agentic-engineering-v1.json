@@ -8,7 +8,7 @@
   "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
   "status": "executing",
   "terminal_semantics": "turn_finished_work_incomplete_durable_next_action",
-  "current_phase": "scientific-and-production-adapters",
+  "current_phase": "bounded-x-signal-ingestion",
   "authority": "single-writer controller in the named worktree",
   "production_boundary": "No Expert/Percival production mutation. Reversible backed-up deployment to the existing corpus-engine-cycle is allowed after current-byte tests and live shadow verification.",
   "completion_test": "A real unattended cycle discovers or selects a public rights-clear evidence candidate, acquires and preserves it, writes a GBrain corpus source artifact, emits a versioned doctrine decision, passes deterministic integrity/retrieval/lineage evaluations, records a receipt and selects the next gap; tests, source-scoped retrieval, dashboard readback, scheduler and rollback are verified.",
@@ -16,17 +16,17 @@
     "durable discovery core and queue",
     "strict seed loader and personal V0 ranker",
     "shared immutable adapter contract with atomic observation/cursor commit",
-    "web, GitHub and YouTube adapters with live 205-card no-delta proof and bounded YouTube fallback"
+    "web, GitHub and YouTube adapters with live 205-card no-delta proof and bounded YouTube fallback",
+    "arXiv, OpenAlex, benchmark, RSS and production-report adapters with explicit reported-claim and evidence-class boundaries"
   ],
-  "next_action": "Add arXiv, OpenAlex, benchmark, RSS and postmortem adapters with failing fixture-first provenance/evidence-classification tests; enforce paper-version/code identity, reported-claim boundaries, corrected-fork distinction and vendor/operator/postmortem evidence classes; then run focused and full discovery.",
+  "next_action": "Add bounded X discovery-signal ingestion with failing tests for exact author/date/URL/text and linked primary-source preservation, duplicate-thread convergence, unverified_discovery_signal classification and doctrine ineligibility; then run focused and full discovery.",
   "last_verified": {
-    "commit": "3af556dea31494740ff38c40aaee77cdfa98535a",
-    "diff_sha256": "fd02ee6667052bafad363bec398555d39dfaa7ea60e13e182e40c7fb9a79a0ea",
-    "focused_tests": "python3 -m unittest tests/test_youtube_adapter.py tests/test_web_adapter.py tests/test_github_adapter.py tests/test_corpus_adapter_contract.py tests/test_corpus_engine.py -v => 26 passed",
-    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 114 passed",
-    "static": "python3 -m compileall -q src tests && git diff --cached --check => passed",
-    "copied_live": "205 IndyDevDan cards; before/after manifest 6c991d13e3bc9df66712026686c542c5fb09315ebcaa3bbd124f441c1a19b5d6; Atom feed 404 recovered through bounded yt-dlp inventory; legacy/current semantic revision fb251a3e48a4cc09ca6456b2c761ca7b192e2a6ffdfff94411856336beca0a29; two fetches left one adapter batch and byte-stable state",
-    "receipt": ".hermes/receipts/2026-07-17T060134Z-core-refresh-adapters.json"
+    "commit": "5b2c9d9bac8267742930c1c26057f38eafb38b82",
+    "diff_sha256": "dfb0be03d458e0259e78dd113cb1dfab43ae6ac9d74e1102ad8eb75213264efe",
+    "focused_tests": "python3 -m unittest tests/test_arxiv_adapter.py tests/test_openalex_adapter.py tests/test_benchmark_adapter.py tests/test_rss_adapter.py tests/test_postmortem_adapter.py tests/test_corpus_adapter_contract.py tests/test_web_adapter.py tests/test_github_adapter.py tests/test_youtube_adapter.py -v => 30 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 125 passed",
+    "static": "python3 -m compileall -q src tests && git diff --check && git diff --cached --check => passed",
+    "receipt": ".hermes/receipts/2026-07-17T061048Z-scientific-production-adapters.json"
   },
   "manager_update_key": "core-refresh-adapters-complete",
   "manager_update": {
@@ -35,5 +35,5 @@
     "slack_ts": "1784268202.421769",
     "delivered_at": "2026-07-17T06:03:43Z"
   },
-  "updated_at": "2026-07-17T06:03:43Z"
+  "updated_at": "2026-07-17T06:10:48Z"
 }
