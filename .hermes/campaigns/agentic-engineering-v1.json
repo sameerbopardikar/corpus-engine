@@ -37,12 +37,12 @@
     "receipt": ".hermes/receipts/2026-07-17T081736Z-deterministic-corpus-evals.json",
     "independent_review": "not_completed_in_this_slice"
   },
-  "manager_update_key": "versioned-doctrine-events-complete",
+  "manager_update_key": "deterministic-evals-complete",
   "manager_update": {
     "delivered": true,
-    "delivery_id": "mgr_3ab5266b51134f1d",
-    "slack_ts": "1784275900.441059",
-    "delivered_at": "2026-07-17T08:11:49Z"
+    "delivery_id": "mgr_397e09e4036b4a55",
+    "slack_ts": "1784276457.908729",
+    "delivered_at": "2026-07-17T08:21:12Z"
   },
-  "updated_at": "2026-07-17T08:19:50Z"
+  "updated_at": "2026-07-17T08:21:12Z"
 }
