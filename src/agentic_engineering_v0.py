@@ -53,6 +53,45 @@ def _corpus_pages(corpus_root: Path) -> list[tuple[str, str]]:
     return pages
 
 
+def _source_card_states(corpus_root: Path) -> dict[str, dict[str, str]]:
+    fields = {"source_url", "source_revision", "rights_state", "candidate_status"}
+    states: dict[str, dict[str, str]] = {}
+    for path in sorted(corpus_root.rglob("*.md")):
+        relative = path.relative_to(corpus_root)
+        if relative.parts[:2] == ("discovery", "personal-v0"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        lines = text.splitlines()
+        if not lines or lines[0].strip() != "---":
+            continue
+        values: dict[str, str] = {}
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            key, separator, raw_value = line.partition(":")
+            if separator and key.strip() in fields:
+                value = raw_value.strip().strip('"').strip("'")
+                if value:
+                    values[key.strip()] = value
+        source_url = values.get("source_url")
+        if not source_url or "source_revision" not in values:
+            continue
+        state = {
+            "source_page": str(relative),
+            "source_revision": values["source_revision"],
+            "rights_state": values.get("rights_state", "unknown"),
+            "status": values.get("candidate_status", "acquired"),
+        }
+        canonical_url = source_url.rstrip("/")
+        prior = states.setdefault(canonical_url, state)
+        if prior != state:
+            raise ValueError(f"conflicting acquired source cards for {canonical_url}")
+    return states
+
+
 def _topic_pattern(topic: str) -> re.Pattern[str]:
     words = [re.escape(part) for part in re.split(r"[-_\s]+", topic.lower()) if part]
     return re.compile(r"\b" + r"[-_\s]+".join(words) + r"\b")
@@ -75,6 +114,7 @@ def _rank_candidates(
     bundle: CandidateSeedBundle,
     records: Iterable[CandidateRecord],
     pages: list[tuple[str, str]],
+    source_states: dict[str, dict[str, str]],
 ) -> list[dict[str, Any]]:
     observations = bundle.observations(source_ref="candidate-ranking")
     seeds_by_candidate_id = {
@@ -84,6 +124,7 @@ def _rank_candidates(
     ranked: list[dict[str, Any]] = []
     for record in records:
         seed = seeds_by_candidate_id[record.candidate_id]
+        source_state = source_states.get(record.canonical_url.rstrip("/"))
         topic_hits = {topic: _topic_page_hits(topic, pages) for topic in record.topics}
         gap_score = sum(1.0 / (1 + hits) for hits in topic_hits.values()) / max(len(topic_hits), 1)
         base_score = record.compute_score()["total"]
@@ -98,13 +139,16 @@ def _rank_candidates(
                 "evidence_lane": record.evidence_lane,
                 "authority_tier": seed.authority_tier,
                 "refresh_class": seed.refresh_class,
-                "rights_state": record.rights_state,
+                "rights_state": source_state["rights_state"] if source_state else record.rights_state,
                 "topics": list(record.topics),
                 "topic_page_hits": topic_hits,
                 "base_score": round(base_score, 8),
                 "gap_score": round(gap_score, 8),
                 "priority_score": round(priority_score, 8),
-                "status": record.status,
+                "status": source_state["status"] if source_state else record.status,
+                "acquired": source_state is not None,
+                "source_revision": source_state["source_revision"] if source_state else None,
+                "source_page": source_state["source_page"] if source_state else None,
             }
         )
     ranked.sort(key=lambda item: (-item["priority_score"], item["seed_id"]))
@@ -159,6 +203,11 @@ def _render_markdown(result: dict[str, Any]) -> str:
                 f"   - Uncovered topics: {', '.join(gaps) if gaps else 'none by deterministic lexical check'}",
             ]
         )
+        if item["acquired"]:
+            lines.append(
+                f"   - Acquisition: `{item['status']}`; rights: `{item['rights_state']}`; "
+                f"revision: `{item['source_revision']}`; page: `{item['source_page']}`"
+            )
     lines.extend(["", "## Probationary doctrine concepts", ""])
     if result["doctrine_proposals"]:
         lines.extend(f"- `{topic}`" for topic in result["doctrine_proposals"])
@@ -191,6 +240,7 @@ def run_v0(
     safe_cycle = _safe_cycle_id(cycle_id)
     bundle = load_candidate_seed(seed_path)
     pages = _corpus_pages(corpus_root)
+    source_states = _source_card_states(corpus_root)
     engine: DiscoveryEngine | None = None
     queued_work_ids: list[str] = []
 
@@ -209,7 +259,7 @@ def run_v0(
             if record.candidate_id in seed_candidate_ids
         ]
 
-    ranked = _rank_candidates(bundle, records, pages)
+    ranked = _rank_candidates(bundle, records, pages, source_states)
 
     if not dry_run:
         assert engine is not None

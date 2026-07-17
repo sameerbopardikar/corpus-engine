@@ -90,6 +90,35 @@ class AgenticEngineeringV0Tests(unittest.TestCase):
         self.assertTrue((self.output_root / "latest.md").exists())
         self.assertEqual(self.registry.read_bytes(), self.registry_before)
 
+    def test_acquired_source_card_reconciles_dashboard_rights_and_status(self):
+        source = self.corpus_root / "sources" / "gap.md"
+        source.parent.mkdir()
+        source.write_text(
+            "---\n"
+            "source_url: https://example.com/gap\n"
+            "source_revision: abc123\n"
+            "rights_state: public_rights_clear\n"
+            "candidate_status: probationary\n"
+            "---\n\nAcquired evidence.\n",
+            encoding="utf-8",
+        )
+        result = run_v0(
+            seed_path=self.seed,
+            corpus_root=self.corpus_root,
+            state_root=self.state_root,
+            output_root=self.output_root,
+            cycle_id="acquired",
+            queue_top=0,
+        )
+        gap = next(item for item in result["ranked_candidates"] if item["seed_id"] == "gap")
+        self.assertTrue(gap["acquired"])
+        self.assertEqual(gap["rights_state"], "public_rights_clear")
+        self.assertEqual(gap["status"], "probationary")
+        self.assertEqual(gap["source_revision"], "abc123")
+        self.assertEqual(gap["source_page"], "sources/gap.md")
+        dashboard = (self.output_root / "latest.md").read_text(encoding="utf-8")
+        self.assertIn("Acquisition: `probationary`; rights: `public_rights_clear`; revision: `abc123`", dashboard)
+
     def test_same_cycle_is_physically_idempotent(self):
         first = run_v0(
             seed_path=self.seed,
