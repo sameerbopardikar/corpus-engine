@@ -20,16 +20,17 @@
     "arXiv, OpenAlex, benchmark, RSS and production-report adapters with explicit reported-claim and evidence-class boundaries",
     "bounded X discovery-signal ingestion with exact post preservation, duplicate-thread convergence and hard doctrine ineligibility",
     "deterministic budgeted priority policy with rights fail-closed admission, item/token/cost caps, no-delta suppression, retry/backoff and bounded starvation control",
-    "priority P1 remediation with canonical request preimages, deterministic reservation replay, coherent-tamper rejection and physical no-op metadata preservation"
+    "priority P1 remediation with canonical request preimages, deterministic reservation replay, coherent-tamper rejection and physical no-op metadata preservation",
+    "discovery replay validation for every work transition plus durable automatic expired-lease recovery before selection"
   ],
-  "next_action": "Close the remaining durable discovery/queue P1s with current-byte adversarial tests: impossible replay transitions, artifact-backed verifier-authorized proof, domain/rights admission, automatic expired-lease recovery, and atomic-write rollback/readback; then close adapter rights/cursor/pending-caption/content-addressed provenance/minimum-content findings before doctrine events.",
+  "next_action": "Add failing adversarial tests and minimal implementation for artifact-backed verifier-authorized completion proof, candidate/domain/rights admission, and atomic ledger append rollback/readback; then close adapter rights/cursor/pending-caption/content-addressed provenance/minimum-content findings before doctrine events.",
   "last_verified": {
-    "commit": "27d1952eac77ddea08a14b584ae1c56eb95ccd76",
-    "diff_sha256": "2a020a529a0a8280d78de7321ead7c8c8b01bbbffb197f0b5fa8162b9bc19351",
-    "focused_tests": "python3 -m unittest tests/test_corpus_priority.py -v => 16 passed",
-    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 146 passed",
+    "commit": "1a68f6f9e19fe2abf2c3d3efef4b4715a077fb94",
+    "diff_sha256": "fd36e8c5dbc5c3f68438b626449c719adb580caf929894cd300ef0d770feccf5",
+    "focused_tests": "python3 -m unittest tests/test_corpus_discovery.py tests/test_corpus_discovery_adversarial.py -v => 31 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 148 passed",
     "static": "python3 -m compileall -q src tests && git diff --check && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed",
-    "receipt": ".hermes/receipts/2026-07-17T071203Z-independent-p1-priority-remediation.json"
+    "receipt": ".hermes/receipts/2026-07-17T072059Z-discovery-replay-lease-recovery.json"
   },
   "manager_update_key": "budgeted-priority-policy-complete",
   "manager_update": {
@@ -38,5 +39,5 @@
     "slack_ts": "1784269929.754339",
     "delivered_at": "2026-07-17T06:32:22Z"
   },
-  "updated_at": "2026-07-17T07:12:03Z"
+  "updated_at": "2026-07-17T07:20:59Z"
 }
