@@ -60,6 +60,12 @@
     "code_graph": "GBrain code_callers/code_blast returned not_built/not_found for AdapterRunner.run, ObservationBatch.create, YouTubeFeedAdapter.fetch and parse_feed.",
     "repository_search": "AdapterRunner.run is called by CorpusEngine.run_adapter and adapter tests; ObservationBatch.create is called only by AdapterRunner.run; parse_feed is used by the YouTube adapter and CorpusEngine legacy-revision migration."
   },
+  "manager_update": {
+    "update_key": "core-refresh-adapters-complete",
+    "delivery_id": "mgr_d44eca04363f4e56",
+    "slack_ts": "1784268202.421769",
+    "delivered_at": "2026-07-17T06:03:43Z"
+  },
   "external_acquisition": {
     "deep_public_source_packages_today_this_slice": 1,
     "source": "IndyDevDan public YouTube channel inventory",
