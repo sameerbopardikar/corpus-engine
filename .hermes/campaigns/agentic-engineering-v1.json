@@ -8,7 +8,7 @@
   "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
   "status": "executing",
   "terminal_semantics": "turn_finished_work_incomplete_durable_next_action",
-  "current_phase": "versioned-doctrine-events-and-lineage",
+  "current_phase": "independent-p1-discovery-and-adapter-remediation",
   "authority": "single-writer controller in the named worktree",
   "production_boundary": "No Expert/Percival production mutation. Reversible backed-up deployment to the existing corpus-engine-cycle is allowed after current-byte tests and live shadow verification.",
   "completion_test": "A real unattended cycle discovers or selects a public rights-clear evidence candidate, acquires and preserves it, writes a GBrain corpus source artifact, emits a versioned doctrine decision, passes deterministic integrity/retrieval/lineage evaluations, records a receipt and selects the next gap; tests, source-scoped retrieval, dashboard readback, scheduler and rollback are verified.",
@@ -19,16 +19,17 @@
     "web, GitHub and YouTube adapters with live 205-card no-delta proof and bounded YouTube fallback",
     "arXiv, OpenAlex, benchmark, RSS and production-report adapters with explicit reported-claim and evidence-class boundaries",
     "bounded X discovery-signal ingestion with exact post preservation, duplicate-thread convergence and hard doctrine ineligibility",
-    "deterministic budgeted priority policy with rights fail-closed admission, item/token/cost caps, no-delta suppression, retry/backoff and bounded starvation control"
+    "deterministic budgeted priority policy with rights fail-closed admission, item/token/cost caps, no-delta suppression, retry/backoff and bounded starvation control",
+    "priority P1 remediation with canonical request preimages, deterministic reservation replay, coherent-tamper rejection and physical no-op metadata preservation"
   ],
-  "next_action": "Add failing doctrine-event and replay tests for create/alias/merge/split/revise/bound/supersede/deprecate/reject/restore, citation preservation, contradiction non-overwrite, external-claim/Sameer-belief separation, rollback and retrieval/eval routing; then implement the minimal append-only doctrine graph and run focused/full verification.",
+  "next_action": "Close the remaining durable discovery/queue P1s with current-byte adversarial tests: impossible replay transitions, artifact-backed verifier-authorized proof, domain/rights admission, automatic expired-lease recovery, and atomic-write rollback/readback; then close adapter rights/cursor/pending-caption/content-addressed provenance/minimum-content findings before doctrine events.",
   "last_verified": {
-    "commit": "6aef0c46bcbce1dbfa910d0409d126b5a7aa626b",
-    "diff_sha256": "e06da60c3481f5f54ceb3abea5dfe60eb3eaf34d610434272a45e4e19eb94b38",
-    "focused_tests": "python3 -m unittest tests/test_corpus_priority.py -v => 10 passed",
-    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 140 passed",
+    "commit": "27d1952eac77ddea08a14b584ae1c56eb95ccd76",
+    "diff_sha256": "2a020a529a0a8280d78de7321ead7c8c8b01bbbffb197f0b5fa8162b9bc19351",
+    "focused_tests": "python3 -m unittest tests/test_corpus_priority.py -v => 16 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 146 passed",
     "static": "python3 -m compileall -q src tests && git diff --check && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed",
-    "receipt": ".hermes/receipts/2026-07-17T063102Z-budgeted-priority.json"
+    "receipt": ".hermes/receipts/2026-07-17T071203Z-independent-p1-priority-remediation.json"
   },
   "manager_update_key": "budgeted-priority-policy-complete",
   "manager_update": {
@@ -37,5 +38,5 @@
     "slack_ts": "1784269929.754339",
     "delivered_at": "2026-07-17T06:32:22Z"
   },
-  "updated_at": "2026-07-17T06:32:22Z"
+  "updated_at": "2026-07-17T07:12:03Z"
 }
