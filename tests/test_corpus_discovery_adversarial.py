@@ -213,6 +213,48 @@ class DiscoveryAdversarialTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 engine.select_work(budget=bad_budget, now=NOW)
 
+    def test_replay_rejects_impossible_work_transition_even_when_snapshot_is_valid(self):
+        engine = self.engine()
+        work = self.enqueue(engine)
+        forged_lease = work.lease(
+            owner="forged-worker",
+            ttl_seconds=60,
+            now=NOW,
+            lease_token="forged-token",
+        )
+        engine.ledger.append(
+            "work_state_changed",
+            {"work": forged_lease.to_dict(), "transition": "completed"},
+            recorded_at=NOW,
+        )
+
+        with self.assertRaises(discovery.LedgerCorruptionError):
+            self.engine()
+
+    def test_select_work_durably_recovers_expired_leases_before_ranking(self):
+        engine = self.engine()
+        work = self.enqueue(engine)
+        engine.lease_work(
+            work.work_id,
+            owner="abandoned-worker",
+            ttl_seconds=1,
+            now=NOW,
+            lease_token="abandoned-token",
+        )
+
+        selected = engine.select_work(now=NOW + timedelta(seconds=1))
+
+        self.assertEqual([item.work_id for item in selected], [work.work_id])
+        self.assertEqual(selected[0].state, "pending")
+        self.assertEqual(selected[0].attempts, 1)
+        restarted = self.engine()
+        self.assertEqual(restarted.work_items[work.work_id].state, "pending")
+        self.assertEqual(restarted.work_items[work.work_id].attempts, 1)
+        self.assertEqual(
+            [event["payload"].get("transition") for event in restarted.ledger.read_events()],
+            [None, "leased", "lease_expired"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

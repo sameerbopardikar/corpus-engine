@@ -144,6 +144,70 @@ def score_observation(observation: CandidateObservation) -> tuple[Mapping[str, f
     return scores, rationale
 
 
+def _validate_work_transition(previous: WorkItem, current: WorkItem, transition: Any) -> None:
+    """Reject valid-looking snapshots that are not the declared next state."""
+    if not isinstance(transition, str):
+        raise LedgerCorruptionError("work transition label must be a string")
+    if current.work_id != previous.work_id:
+        raise LedgerCorruptionError("work transition changed work identity")
+    moment = parse_iso(current.updated_at)
+    assert moment is not None
+    try:
+        if transition == "leased":
+            expiry = parse_iso(current.lease_expires_at)
+            if expiry is None:
+                raise ValueError("leased transition lacks expiry")
+            ttl = (expiry - moment).total_seconds()
+            if not ttl.is_integer() or ttl <= 0:
+                raise ValueError("leased transition has invalid ttl")
+            expected = previous.lease(
+                owner=current.lease_owner or "",
+                ttl_seconds=int(ttl),
+                now=moment,
+                lease_token=current.lease_token or "",
+            )
+        elif transition == "lease_expired":
+            expected = previous.release_if_expired(now=moment)
+            if expected is previous:
+                raise ValueError("lease was not expired")
+        elif transition == "failed":
+            retry_after = parse_iso(current.retry_after)
+            retry_seconds = 1
+            if retry_after is not None:
+                delta = (retry_after - moment).total_seconds()
+                if not delta.is_integer() or delta <= 0:
+                    raise ValueError("failed transition has invalid retry delay")
+                retry_seconds = int(delta)
+            expected = previous.fail(
+                owner=previous.lease_owner or "",
+                lease_token=previous.lease_token or "",
+                lease_generation=previous.lease_generation,
+                error=current.last_error or "",
+                retry_after_seconds=retry_seconds,
+                now=moment,
+            )
+        elif transition == "completed":
+            if len(current.proof_receipts) != len(previous.proof_receipts) + 1:
+                raise ValueError("completed transition must add exactly one proof receipt")
+            expected = previous.complete(
+                owner=previous.lease_owner or "",
+                lease_token=previous.lease_token or "",
+                lease_generation=previous.lease_generation,
+                proof_receipt=current.proof_receipts[-1],
+                now=moment,
+            )
+        else:
+            raise ValueError(f"unknown work transition: {transition!r}")
+    except ValueError as exc:
+        raise LedgerCorruptionError(
+            f"invalid {transition!r} transition for {current.work_id}: {exc}"
+        ) from exc
+    if expected.to_dict() != current.to_dict():
+        raise LedgerCorruptionError(
+            f"work snapshot does not match {transition!r} transition for {current.work_id}"
+        )
+
+
 class DiscoveryLedger:
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -318,8 +382,7 @@ class DiscoveryEngine:
                     previous = work_items.get(work.work_id)
                     if previous is None:
                         raise LedgerCorruptionError(f"state transition references unknown work: {work.work_id}")
-                    if work.lease_generation < previous.lease_generation:
-                        raise LedgerCorruptionError(f"lease generation regressed for {work.work_id}")
+                    _validate_work_transition(previous, work, payload.get("transition"))
                     work_items[work.work_id] = work
         except (KeyError, TypeError, ValueError) as exc:
             if isinstance(exc, LedgerCorruptionError):
@@ -526,6 +589,12 @@ class DiscoveryEngine:
         moment = utcnow() if now is None else now
         with self.ledger.transaction():
             self._replay()
+            for work_id, work in list(self.work_items.items()):
+                released = work.release_if_expired(now=moment)
+                if released is work:
+                    continue
+                self._append_work_state(released, "lease_expired", recorded_at=moment)
+                self.work_items[work_id] = released
             eligible: list[WorkItem] = []
             for work in self.work_items.values():
                 if work.state != "pending":
