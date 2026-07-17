@@ -56,7 +56,11 @@
   },
   "manager_update_key": "verified-complete",
   "manager_update": {
-    "delivered": false
+    "delivered": true,
+    "delivery_id": "mgr_7b8b69a9cebe4b86",
+    "session_id": "20260717_090935_dc8320ac",
+    "slack_ts": "1784279373.369669",
+    "delivered_at": "2026-07-17T09:09:40Z"
   },
-  "updated_at": "2026-07-17T09:07:46Z"
+  "updated_at": "2026-07-17T09:09:40Z"
 }
