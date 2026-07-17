@@ -227,20 +227,29 @@ class CorpusPriorityTests(unittest.TestCase):
             first = ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
             before = path.read_bytes()
             before_stat = path.stat()
+            lock_before_stat = ledger.lock_path.stat()
             second = ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
             self.assertEqual(first.to_dict(), second.to_dict())
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(
-                (path.stat().st_ino, path.stat().st_mtime_ns, path.stat().st_size),
-                (before_stat.st_ino, before_stat.st_mtime_ns, before_stat.st_size),
+                (path.stat().st_ino, path.stat().st_mtime_ns, path.stat().st_ctime_ns, path.stat().st_size),
+                (before_stat.st_ino, before_stat.st_mtime_ns, before_stat.st_ctime_ns, before_stat.st_size),
+            )
+            self.assertEqual(
+                (ledger.lock_path.stat().st_ino, ledger.lock_path.stat().st_mtime_ns, ledger.lock_path.stat().st_ctime_ns),
+                (lock_before_stat.st_ino, lock_before_stat.st_mtime_ns, lock_before_stat.st_ctime_ns),
             )
             conflicting = CandidateTask(candidate("different"), estimated_cost_usd=0.25)
             with self.assertRaisesRegex(ValueError, "conflicting reservation_id"):
                 ledger.reserve_cycle("cycle-one", [conflicting], self.policy, now=NOW)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(
-                (path.stat().st_ino, path.stat().st_mtime_ns, path.stat().st_size),
-                (before_stat.st_ino, before_stat.st_mtime_ns, before_stat.st_size),
+                (path.stat().st_ino, path.stat().st_mtime_ns, path.stat().st_ctime_ns, path.stat().st_size),
+                (before_stat.st_ino, before_stat.st_mtime_ns, before_stat.st_ctime_ns, before_stat.st_size),
+            )
+            self.assertEqual(
+                (ledger.lock_path.stat().st_ino, ledger.lock_path.stat().st_mtime_ns, ledger.lock_path.stat().st_ctime_ns),
+                (lock_before_stat.st_ino, lock_before_stat.st_mtime_ns, lock_before_stat.st_ctime_ns),
             )
 
     def test_budget_ledger_rejects_forged_accounting(self):
@@ -258,6 +267,29 @@ class CorpusPriorityTests(unittest.TestCase):
             document["reservations"]["cycle-one"]["plan"]["llm_tokens_scheduled"] = 0
             path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "inconsistent stored cycle plan"):
+                ledger.usage_for_day(NOW)
+
+    def test_budget_ledger_rejects_coherent_plan_rewrite(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "budget.json"
+            ledger = BudgetLedger(path)
+            task = CandidateTask(
+                candidate("coherent-tamper"),
+                requires_llm=True,
+                estimated_llm_tokens=50_000,
+                estimated_cost_usd=1.0,
+            )
+            ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
+            document = json.loads(path.read_text(encoding="utf-8"))
+            plan = document["reservations"]["cycle-one"]["plan"]
+            plan["decisions"][0]["scheduled"] = False
+            plan["selected_candidate_ids"] = []
+            plan["deep_acquisitions_scheduled"] = 0
+            plan["llm_tasks_scheduled"] = 0
+            plan["llm_tokens_scheduled"] = 0
+            plan["estimated_cost_usd"] = 0.0
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "stored reservation plan does not match request"):
                 ledger.usage_for_day(NOW)
 
     def test_budget_ledger_rejects_preplanted_dangling_state_symlink(self):

@@ -609,6 +609,24 @@ def _task_payload(task: CandidateTask) -> dict[str, Any]:
     }
 
 
+def _task_from_payload(data: Any) -> CandidateTask:
+    expected = {
+        "candidate", "material_delta", "requires_llm", "estimated_llm_tokens",
+        "estimated_cost_usd", "failure_count", "last_attempted_at",
+    }
+    if not isinstance(data, dict) or set(data) != expected or not isinstance(data.get("candidate"), dict):
+        raise ValueError("invalid stored candidate task")
+    return CandidateTask(
+        candidate=CandidateRecord.from_dict(data["candidate"]),
+        material_delta=data["material_delta"],
+        requires_llm=data["requires_llm"],
+        estimated_llm_tokens=data["estimated_llm_tokens"],
+        estimated_cost_usd=data["estimated_cost_usd"],
+        failure_count=data["failure_count"],
+        last_attempted_at=data["last_attempted_at"],
+    )
+
+
 def _open_private_regular(path: Path, flags: int) -> int:
     descriptor = os.open(
         path,
@@ -616,9 +634,11 @@ def _open_private_regular(path: Path, flags: int) -> int:
         0o600,
     )
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        descriptor_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(descriptor_stat.st_mode):
             raise ValueError(f"path is not a regular file: {path}")
-        os.fchmod(descriptor, 0o600)
+        if stat.S_IMODE(descriptor_stat.st_mode) != 0o600:
+            os.fchmod(descriptor, 0o600)
         return descriptor
     except Exception:
         os.close(descriptor)
@@ -652,18 +672,59 @@ class BudgetLedger:
             or not isinstance(document.get("reservations"), dict)
         ):
             raise ValueError("invalid budget ledger state")
+        ordered_reservations: list[tuple[int, str, dict[str, Any]]] = []
         for reservation_id, reservation in document["reservations"].items():
             if (
                 not isinstance(reservation_id, str)
                 or not reservation_id.strip()
                 or not isinstance(reservation, dict)
-                or set(reservation) != {"request_sha256", "utc_day", "plan"}
+                or set(reservation) != {"request_sha256", "request", "utc_day", "sequence", "plan"}
                 or not isinstance(reservation["request_sha256"], str)
+                or not isinstance(reservation["request"], dict)
                 or not isinstance(reservation["utc_day"], str)
+                or isinstance(reservation["sequence"], bool)
+                or not isinstance(reservation["sequence"], int)
+                or reservation["sequence"] < 0
                 or not isinstance(reservation["plan"], dict)
             ):
                 raise ValueError("invalid budget reservation")
             CyclePlan.from_dict(reservation["plan"])
+            ordered_reservations.append((reservation["sequence"], reservation_id, reservation))
+        ordered_reservations.sort()
+        if [item[0] for item in ordered_reservations] != list(range(len(ordered_reservations))):
+            raise ValueError("invalid budget reservation sequence")
+        replay_usage: dict[str, UsageSnapshot] = {}
+        for _, reservation_id, reservation in ordered_reservations:
+            request = reservation["request"]
+            request_bytes = json.dumps(
+                request, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode("utf-8")
+            if hashlib.sha256(request_bytes).hexdigest() != reservation["request_sha256"]:
+                raise ValueError("budget reservation request digest mismatch")
+            if set(request) != {"reservation_id", "now", "policy", "tasks"}:
+                raise ValueError("invalid stored budget request")
+            if request["reservation_id"] != reservation_id:
+                raise ValueError("stored reservation identity mismatch")
+            try:
+                policy = PriorityPolicy(**request["policy"])
+                tasks = tuple(_task_from_payload(item) for item in request["tasks"])
+                requested_at = _parse_iso(request["now"], "stored request now")
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("invalid stored budget request") from exc
+            utc_day = requested_at.date().isoformat()
+            if reservation["utc_day"] != utc_day:
+                raise ValueError("stored reservation UTC day mismatch")
+            prior_usage = replay_usage.get(utc_day, UsageSnapshot())
+            expected_plan = plan_cycle(tasks, policy, prior_usage, now=requested_at)
+            stored_plan = CyclePlan.from_dict(reservation["plan"])
+            if stored_plan.to_dict() != expected_plan.to_dict():
+                raise ValueError("stored reservation plan does not match request")
+            replay_usage[utc_day] = UsageSnapshot(
+                deep_acquisitions=prior_usage.deep_acquisitions + expected_plan.deep_acquisitions_scheduled,
+                llm_tasks=prior_usage.llm_tasks + expected_plan.llm_tasks_scheduled,
+                llm_tokens=prior_usage.llm_tokens + expected_plan.llm_tokens_scheduled,
+                estimated_cost_usd=round(prior_usage.estimated_cost_usd + expected_plan.estimated_cost_usd, 8),
+            )
         return document
 
     def _write_state(self, state: Mapping[str, Any]) -> None:
@@ -767,7 +828,9 @@ class BudgetLedger:
                 plan = plan_cycle(task_list, policy, usage, now=current)
                 state["reservations"][reservation_id] = {
                     "request_sha256": request_sha256,
+                    "request": request,
                     "utc_day": utc_day,
+                    "sequence": len(state["reservations"]),
                     "plan": plan.to_dict(),
                 }
                 self._write_state(state)
