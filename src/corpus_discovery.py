@@ -8,6 +8,7 @@ invariants, appends and fsyncs one event, then updates the in-memory projection.
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -36,6 +37,16 @@ _EVENT_TYPES = {
     "candidate_transitioned",
     "work_enqueued",
     "work_state_changed",
+}
+_RIGHTS_STATES = {
+    "public_rights_clear", "public_metadata_only", "private_authorized",
+    "rights_unclear", "unknown",
+}
+_MATERIAL_ACTIONS = {"acquire", "normalize", "synthesize"}
+_DEFAULT_AUTHORIZED_VERIFIERS = frozenset({"corpus-engine-verifier"})
+_PROOF_FIELDS = {
+    "schema_version", "work_id", "candidate_id", "action", "verifier",
+    "verified", "artifact_path", "artifact_sha256",
 }
 
 
@@ -144,7 +155,12 @@ def score_observation(observation: CandidateObservation) -> tuple[Mapping[str, f
     return scores, rationale
 
 
-def _validate_work_transition(previous: WorkItem, current: WorkItem, transition: Any) -> None:
+def _validate_work_transition(
+    previous: WorkItem,
+    current: WorkItem,
+    transition: Any,
+    proof: Any = None,
+) -> None:
     """Reject valid-looking snapshots that are not the declared next state."""
     if not isinstance(transition, str):
         raise LedgerCorruptionError("work transition label must be a string")
@@ -189,6 +205,22 @@ def _validate_work_transition(previous: WorkItem, current: WorkItem, transition:
         elif transition == "completed":
             if len(current.proof_receipts) != len(previous.proof_receipts) + 1:
                 raise ValueError("completed transition must add exactly one proof receipt")
+            if not isinstance(proof, dict):
+                raise ValueError("completed transition requires durable proof metadata")
+            if proof.get("receipt_path") != current.proof_receipts[-1]:
+                raise ValueError("completion proof does not bind the stored receipt")
+            if proof.get("work_id") != current.work_id:
+                raise ValueError("completion proof does not bind the work item")
+            if proof.get("candidate_id") != current.candidate_id or proof.get("action") != current.action:
+                raise ValueError("completion proof does not bind candidate and action")
+            for digest_name in ("receipt_sha256", "artifact_sha256"):
+                digest = proof.get(digest_name)
+                if not isinstance(digest, str) or len(digest) != 64 or any(
+                    char not in "0123456789abcdef" for char in digest
+                ):
+                    raise ValueError(f"completion proof has invalid {digest_name}")
+            if not isinstance(proof.get("verifier"), str) or not proof["verifier"].strip():
+                raise ValueError("completion proof lacks verifier identity")
             expected = previous.complete(
                 owner=previous.lease_owner or "",
                 lease_token=previous.lease_token or "",
@@ -276,6 +308,19 @@ class DiscoveryLedger:
         file_handle.flush()
         os.fsync(file_handle.fileno())
 
+    def _readback_appended_event(self, file_handle, *, offset: int, expected: dict[str, Any]) -> None:
+        file_handle.seek(offset)
+        raw = file_handle.read()
+        if not raw.endswith(b"\n") or raw.count(b"\n") != 1:
+            raise LedgerCorruptionError("appended event readback has an invalid frame")
+        try:
+            decoded = json.loads(raw[:-1].decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise LedgerCorruptionError("appended event failed strict readback") from exc
+        validated = self._validate_event(decoded, location=f"{self.path}:append-readback")
+        if validated != expected:
+            raise LedgerCorruptionError("appended event readback differs from requested event")
+
     def append(self, event_type: str, payload: Mapping[str, Any], *, recorded_at=None) -> dict[str, Any]:
         if event_type not in _EVENT_TYPES:
             raise ValueError(f"unsupported event_type: {event_type!r}")
@@ -301,11 +346,29 @@ class DiscoveryLedger:
         with open(self.path, "r+b") as file_handle:
             fcntl.flock(file_handle.fileno(), fcntl.LOCK_EX)
             try:
-                self._repair_valid_unterminated_tail(file_handle)
                 file_handle.seek(0, os.SEEK_END)
-                file_handle.write(encoded)
-                file_handle.flush()
-                os.fsync(file_handle.fileno())
+                original_size = file_handle.tell()
+                try:
+                    self._repair_valid_unterminated_tail(file_handle)
+                    file_handle.seek(0, os.SEEK_END)
+                    append_offset = file_handle.tell()
+                    file_handle.write(encoded)
+                    file_handle.flush()
+                    os.fsync(file_handle.fileno())
+                    self._readback_appended_event(
+                        file_handle,
+                        offset=append_offset,
+                        expected=event,
+                    )
+                except BaseException:
+                    file_handle.seek(0)
+                    file_handle.truncate(original_size)
+                    file_handle.flush()
+                    try:
+                        os.fsync(file_handle.fileno())
+                    except OSError:
+                        pass
+                    raise
             finally:
                 fcntl.flock(file_handle.fileno(), fcntl.LOCK_UN)
         return event
@@ -338,8 +401,19 @@ class DiscoveryLedger:
 
 
 class DiscoveryEngine:
-    def __init__(self, ledger_path: Path | str):
+    def __init__(
+        self,
+        ledger_path: Path | str,
+        *,
+        authorized_verifiers: frozenset[str] | set[str] | tuple[str, ...] = _DEFAULT_AUTHORIZED_VERIFIERS,
+    ):
         self.ledger = DiscoveryLedger(ledger_path)
+        self.authorized_verifiers = frozenset(authorized_verifiers)
+        if not self.authorized_verifiers or any(
+            not isinstance(verifier, str) or not verifier.strip()
+            for verifier in self.authorized_verifiers
+        ):
+            raise ValueError("authorized_verifiers must contain non-empty verifier identities")
         self.candidates: dict[str, CandidateRecord] = {}
         self.work_items: dict[str, WorkItem] = {}
         self._replay()
@@ -360,6 +434,7 @@ class DiscoveryEngine:
                             observation,
                             payload["score_components"],
                             rationale=payload.get("rationale", ""),
+                            rights_state=payload.get("rights_state", "unknown"),
                         )
                     else:
                         candidates[candidate_id] = candidates[candidate_id].observe(observation)
@@ -382,7 +457,22 @@ class DiscoveryEngine:
                     previous = work_items.get(work.work_id)
                     if previous is None:
                         raise LedgerCorruptionError(f"state transition references unknown work: {work.work_id}")
-                    _validate_work_transition(previous, work, payload.get("transition"))
+                    proof = payload.get("proof")
+                    if payload.get("transition") == "completed" and isinstance(proof, dict):
+                        durable_proof = self._validate_completion_proof(
+                            previous,
+                            proof.get("receipt_path", ""),
+                        )
+                        if durable_proof != proof:
+                            raise LedgerCorruptionError(
+                                "completion proof metadata differs from durable receipt/artifact"
+                            )
+                    _validate_work_transition(
+                        previous,
+                        work,
+                        payload.get("transition"),
+                        proof,
+                    )
                     work_items[work.work_id] = work
         except (KeyError, TypeError, ValueError) as exc:
             if isinstance(exc, LedgerCorruptionError):
@@ -403,10 +493,15 @@ class DiscoveryEngine:
         *,
         score_components: Mapping[str, float] | None = None,
         rationale: str | None = None,
+        rights_state: str = "unknown",
     ) -> CandidateRecord:
+        if rights_state not in _RIGHTS_STATES:
+            raise ValueError(f"unknown rights_state: {rights_state!r}")
         with self._mutation():
             existing = self.candidates.get(observation.candidate_key)
             if existing is not None:
+                if rights_state != "unknown" and rights_state != existing.rights_state:
+                    raise ValueError("observation cannot silently change candidate rights_state")
                 updated = existing.observe(observation)
                 if updated is existing:
                     return existing
@@ -414,6 +509,7 @@ class DiscoveryEngine:
                     "observation": observation.to_dict(),
                     "score_components": dict(existing.score_components),
                     "rationale": existing.rationale,
+                    "rights_state": existing.rights_state,
                 })
                 self.candidates[observation.candidate_key] = updated
                 return updated
@@ -427,11 +523,13 @@ class DiscoveryEngine:
                 observation,
                 scores,
                 rationale=rationale,
+                rights_state=rights_state,
             )
             self.ledger.append("candidate_observed", {
                 "observation": observation.to_dict(),
                 "score_components": dict(record.score_components),
                 "rationale": record.rationale,
+                "rights_state": record.rights_state,
             })
             self.candidates[record.candidate_id] = record
             return record
@@ -468,6 +566,15 @@ class DiscoveryEngine:
         now=None,
     ) -> WorkItem:
         with self._mutation():
+            candidate = self.candidates.get(candidate_id)
+            if candidate is None:
+                raise ValueError(f"work references unknown candidate: {candidate_id}")
+            if candidate.domain != domain:
+                raise ValueError("work domain does not match candidate domain")
+            if action in _MATERIAL_ACTIONS and candidate.rights_state != "public_rights_clear":
+                raise ValueError(
+                    f"{action} requires candidate rights_state='public_rights_clear'"
+                )
             work = WorkItem.create(
                 domain=domain,
                 candidate_id=candidate_id,
@@ -484,12 +591,77 @@ class DiscoveryEngine:
             self.work_items[work.work_id] = work
             return work
 
-    def _append_work_state(self, work: WorkItem, transition: str, *, recorded_at) -> None:
+    def _append_work_state(
+        self,
+        work: WorkItem,
+        transition: str,
+        *,
+        recorded_at,
+        proof: Mapping[str, Any] | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {"work": work.to_dict(), "transition": transition}
+        if proof is not None:
+            payload["proof"] = dict(proof)
         self.ledger.append(
             "work_state_changed",
-            {"work": work.to_dict(), "transition": transition},
+            payload,
             recorded_at=recorded_at,
         )
+
+    @staticmethod
+    def _sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _validate_completion_proof(self, work: WorkItem, proof_receipt: str) -> dict[str, Any]:
+        receipt_path = Path(proof_receipt)
+        if not receipt_path.is_absolute():
+            raise ValueError("proof_receipt must be an absolute path")
+        if receipt_path.is_symlink() or not receipt_path.is_file():
+            raise ValueError("proof_receipt must be a regular non-symlink file")
+        raw = receipt_path.read_bytes()
+        if not raw or len(raw) > 64 * 1024:
+            raise ValueError("proof_receipt must be non-empty and at most 64 KiB")
+        try:
+            document = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("proof_receipt must contain valid JSON") from exc
+        if not isinstance(document, dict) or set(document) != _PROOF_FIELDS:
+            raise ValueError("proof_receipt has missing or unknown fields")
+        expected_identity = {
+            "schema_version": 1,
+            "work_id": work.work_id,
+            "candidate_id": work.candidate_id,
+            "action": work.action,
+            "verified": True,
+        }
+        for field_name, expected in expected_identity.items():
+            if document.get(field_name) != expected:
+                raise ValueError(f"proof_receipt does not bind {field_name}")
+        verifier = document.get("verifier")
+        if verifier not in self.authorized_verifiers:
+            raise ValueError("proof_receipt verifier is not authorized")
+        artifact_path = Path(document.get("artifact_path", ""))
+        if not artifact_path.is_absolute():
+            raise ValueError("proof artifact_path must be absolute")
+        if artifact_path.is_symlink() or not artifact_path.is_file():
+            raise ValueError("proof artifact must be a regular non-symlink file")
+        artifact_digest = self._sha256_file(artifact_path)
+        if artifact_digest != document.get("artifact_sha256"):
+            raise ValueError("proof artifact SHA-256 mismatch")
+        return {
+            "receipt_path": str(receipt_path),
+            "receipt_sha256": hashlib.sha256(raw).hexdigest(),
+            "work_id": work.work_id,
+            "candidate_id": work.candidate_id,
+            "action": work.action,
+            "verifier": verifier,
+            "artifact_path": str(artifact_path),
+            "artifact_sha256": artifact_digest,
+        }
 
     def lease_work(
         self,
@@ -556,14 +728,16 @@ class DiscoveryEngine:
         now=None,
     ) -> WorkItem:
         with self._mutation():
-            done = self.work_items[work_id].complete(
+            current = self.work_items[work_id]
+            proof = self._validate_completion_proof(current, proof_receipt)
+            done = current.complete(
                 owner=owner,
                 lease_token=lease_token,
                 lease_generation=lease_generation,
                 proof_receipt=proof_receipt,
                 now=now,
             )
-            self._append_work_state(done, "completed", recorded_at=now)
+            self._append_work_state(done, "completed", recorded_at=now, proof=proof)
             self.work_items[work_id] = done
             return done
 

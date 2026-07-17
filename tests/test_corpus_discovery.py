@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import sys
 import tempfile
@@ -49,6 +50,33 @@ class DiscoveryEngineTestCase(unittest.TestCase):
 
     def engine(self) -> "discovery.DiscoveryEngine":
         return discovery.DiscoveryEngine(self.ledger_path)
+
+    def candidate(self, engine, *, domain="d", key="abc"):
+        observation = make_observation(
+            domain=domain,
+            canonical_url=f"https://example.com/{domain}/{key}",
+            discovery_source=f"test:{key}",
+            evidence_pointer=f"evidence/{key}.json",
+            observed_at=models.iso(NOW),
+        )
+        return engine.observe(observation, rights_state="public_rights_clear")
+
+    def proof_receipt(self, work):
+        artifact = Path(self.tmpdir.name) / f"{work.work_id}.artifact"
+        body = b"verified artifact\n"
+        artifact.write_bytes(body)
+        receipt = Path(self.tmpdir.name) / f"{work.work_id}.proof.json"
+        receipt.write_text(json.dumps({
+            "schema_version": 1,
+            "work_id": work.work_id,
+            "candidate_id": work.candidate_id,
+            "action": work.action,
+            "verifier": "corpus-engine-verifier",
+            "verified": True,
+            "artifact_path": str(artifact.resolve()),
+            "artifact_sha256": hashlib.sha256(body).hexdigest(),
+        }), encoding="utf-8")
+        return str(receipt.resolve())
 
 
 class ScoringTests(DiscoveryEngineTestCase):
@@ -141,12 +169,12 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_enqueue_work_is_idempotent(self):
         engine = self.engine()
         first = engine.enqueue_work(
-            domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
+            domain="agentic-engineering", candidate_id=self.candidate(engine, domain="agentic-engineering").candidate_id, action="inspect",
             score_components={"priority_score": 0.2}, budget_estimate=1.0, now=NOW,
         )
         events_after_first = len(engine.ledger.read_events())
         second = engine.enqueue_work(
-            domain="agentic-engineering", candidate_id="cand_abc", action="inspect",
+            domain="agentic-engineering", candidate_id=self.candidate(engine, domain="agentic-engineering").candidate_id, action="inspect",
             score_components={"priority_score": 0.9}, budget_estimate=5.0, now=NOW,
         )
         self.assertEqual(first.work_id, second.work_id)
@@ -156,15 +184,15 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_select_work_orders_by_priority_and_respects_budget(self):
         engine = self.engine()
         low = engine.enqueue_work(
-            domain="d", candidate_id="cand_low", action="inspect",
+            domain="d", candidate_id=self.candidate(engine, key="low").candidate_id, action="inspect",
             score_components={"priority_score": 0.2}, budget_estimate=3.0, now=NOW,
         )
         high = engine.enqueue_work(
-            domain="d", candidate_id="cand_high", action="inspect",
+            domain="d", candidate_id=self.candidate(engine, key="high").candidate_id, action="inspect",
             score_components={"priority_score": 0.9}, budget_estimate=3.0, now=NOW,
         )
         mid = engine.enqueue_work(
-            domain="d", candidate_id="cand_mid", action="inspect",
+            domain="d", candidate_id=self.candidate(engine, key="mid").candidate_id, action="inspect",
             score_components={"priority_score": 0.5}, budget_estimate=3.0, now=NOW,
         )
         selected = engine.select_work(action="inspect", budget=6.0)
@@ -174,11 +202,11 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_select_work_filters_by_action(self):
         engine = self.engine()
         engine.enqueue_work(
-            domain="d", candidate_id="cand_a", action="inspect",
+            domain="d", candidate_id=self.candidate(engine, key="a").candidate_id, action="inspect",
             score_components={"priority_score": 0.9}, budget_estimate=1.0, now=NOW,
         )
         acquire = engine.enqueue_work(
-            domain="d", candidate_id="cand_b", action="acquire",
+            domain="d", candidate_id=self.candidate(engine, key="b").candidate_id, action="acquire",
             score_components={"priority_score": 0.1}, budget_estimate=1.0, now=NOW,
         )
         selected = engine.select_work(action="acquire", budget=10.0)
@@ -187,7 +215,7 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_double_lease_raises(self):
         engine = self.engine()
         work = engine.enqueue_work(
-            domain="d", candidate_id="cand_abc", action="acquire",
+            domain="d", candidate_id=self.candidate(engine).candidate_id, action="acquire",
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
@@ -198,7 +226,7 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_exact_expiry_boundary_allows_recovery(self):
         engine = self.engine()
         work = engine.enqueue_work(
-            domain="d", candidate_id="cand_abc", action="acquire",
+            domain="d", candidate_id=self.candidate(engine).candidate_id, action="acquire",
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
@@ -211,7 +239,7 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_retry_after_delays_next_lease(self):
         engine = self.engine()
         work = engine.enqueue_work(
-            domain="d", candidate_id="cand_abc", action="verify",
+            domain="d", candidate_id=self.candidate(engine).candidate_id, action="verify",
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
@@ -225,7 +253,7 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_max_attempts_reaches_dead_letter(self):
         engine = self.engine()
         work = engine.enqueue_work(
-            domain="d", candidate_id="cand_abc", action="verify",
+            domain="d", candidate_id=self.candidate(engine).candidate_id, action="verify",
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         started = datetime(2026, 7, 16, tzinfo=timezone.utc)
@@ -241,31 +269,33 @@ class WorkQueueTests(DiscoveryEngineTestCase):
     def test_completion_requires_proof_receipt(self):
         engine = self.engine()
         work = engine.enqueue_work(
-            domain="d", candidate_id="cand_abc", action="verify",
+            domain="d", candidate_id=self.candidate(engine).candidate_id, action="verify",
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
         leased = engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
         with self.assertRaises(ValueError):
             engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt="   ", now=now)
-        done = engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt="receipts/verify/cand_abc.json", now=now)
+        proof_receipt = self.proof_receipt(work)
+        done = engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt=proof_receipt, now=now)
         self.assertEqual(done.state, "done")
-        self.assertIn("receipts/verify/cand_abc.json", done.proof_receipts)
+        self.assertIn(proof_receipt, done.proof_receipts)
 
     def test_restart_replay_reconstructs_work_queue(self):
         engine = self.engine()
         work = engine.enqueue_work(
-            domain="d", candidate_id="cand_abc", action="acquire",
+            domain="d", candidate_id=self.candidate(engine).candidate_id, action="acquire",
             score_components=self.SCORES, budget_estimate=1.0, now=NOW,
         )
         now = datetime(2026, 7, 16, tzinfo=timezone.utc)
         leased = engine.lease_work(work.work_id, owner="worker-1", ttl_seconds=60, now=now, lease_token="token-1")
-        engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt="receipts/acquire/cand_abc.json", now=now)
+        proof_receipt = self.proof_receipt(work)
+        engine.complete_work(work.work_id, owner="worker-1", lease_token="token-1", lease_generation=leased.lease_generation, proof_receipt=proof_receipt, now=now)
 
         restarted = self.engine()
         restored = restarted.work_items[work.work_id]
         self.assertEqual(restored.state, "done")
-        self.assertIn("receipts/acquire/cand_abc.json", restored.proof_receipts)
+        self.assertIn(proof_receipt, restored.proof_receipts)
 
 
 class LedgerCorruptionTests(DiscoveryEngineTestCase):

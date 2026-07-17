@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -8,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -38,10 +40,39 @@ class DiscoveryAdversarialTests(unittest.TestCase):
     def engine(self):
         return discovery.DiscoveryEngine(self.ledger_path)
 
+    def observe_candidate(self, engine, *, domain="agentic-engineering", rights_state="public_rights_clear"):
+        observation = models.CandidateObservation.create(
+            domain=domain,
+            entity_type="repository",
+            canonical_url=f"https://example.com/{domain}",
+            discovery_source="adversarial-test",
+            evidence_pointer=f"evidence/{domain}.json",
+            evidence_lane="implementation-research",
+            observed_at=models.iso(NOW),
+        )
+        return engine.observe(observation, rights_state=rights_state)
+
+    def proof_receipt(self, work, *, verifier="corpus-engine-verifier", artifact_body=b"verified artifact\n"):
+        artifact = Path(self.tmpdir.name) / f"{work.work_id}.artifact"
+        artifact.write_bytes(artifact_body)
+        receipt = Path(self.tmpdir.name) / f"{work.work_id}.proof.json"
+        receipt.write_text(json.dumps({
+            "schema_version": 1,
+            "work_id": work.work_id,
+            "candidate_id": work.candidate_id,
+            "action": work.action,
+            "verifier": verifier,
+            "verified": True,
+            "artifact_path": str(artifact.resolve()),
+            "artifact_sha256": hashlib.sha256(artifact_body).hexdigest(),
+        }), encoding="utf-8")
+        return str(receipt.resolve())
+
     def enqueue(self, engine, *, key="cycle-1"):
+        candidate = next(iter(engine.candidates.values()), None) or self.observe_candidate(engine)
         return engine.enqueue_work(
             domain="agentic-engineering",
-            candidate_id="cand_abc",
+            candidate_id=candidate.candidate_id,
             action="verify",
             score_components={"priority_score": 0.9},
             budget_estimate=1.0,
@@ -119,6 +150,123 @@ class DiscoveryAdversarialTests(unittest.TestCase):
             ledger.append("work_enqueued", {"work": {}}, recorded_at=NOW)
         self.assertEqual(ledger.path.read_bytes(), before)
 
+    def test_append_failure_rolls_back_exact_bytes_and_readback_failure_is_not_committed(self):
+        ledger = self.engine().ledger
+        ledger.append("work_enqueued", {"work": self.pending_record().to_dict()}, recorded_at=NOW)
+        before = ledger.path.read_bytes()
+
+        with mock.patch.object(discovery.os, "fsync", side_effect=OSError("injected fsync failure")):
+            with self.assertRaises(OSError):
+                ledger.append("candidate_observed", {"score": 1}, recorded_at=NOW)
+        self.assertEqual(ledger.path.read_bytes(), before)
+        self.assertEqual(len(ledger.read_events()), 1)
+
+        ledger._readback_appended_event = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            discovery.LedgerCorruptionError("injected readback failure")
+        )
+        with self.assertRaises(discovery.LedgerCorruptionError):
+            ledger.append("candidate_observed", {"score": 1}, recorded_at=NOW)
+        self.assertEqual(ledger.path.read_bytes(), before)
+        self.assertEqual(len(ledger.read_events()), 1)
+
+    def test_enqueue_requires_matching_known_candidate_and_rights_clear_material_acquisition(self):
+        engine = self.engine()
+        with self.assertRaises(ValueError):
+            engine.enqueue_work(
+                domain="agentic-engineering", candidate_id="cand_unknown", action="inspect",
+                score_components={"priority_score": 0.5}, budget_estimate=0.0, now=NOW,
+            )
+        candidate = self.observe_candidate(engine, rights_state="public_metadata_only")
+        before = engine.ledger.path.read_bytes()
+        with self.assertRaises(ValueError):
+            engine.enqueue_work(
+                domain="wrong-domain", candidate_id=candidate.candidate_id, action="inspect",
+                score_components={"priority_score": 0.5}, budget_estimate=0.0, now=NOW,
+            )
+        with self.assertRaises(ValueError):
+            engine.enqueue_work(
+                domain=candidate.domain, candidate_id=candidate.candidate_id, action="acquire",
+                score_components={"priority_score": 0.5}, budget_estimate=0.0, now=NOW,
+            )
+        self.assertEqual(engine.ledger.path.read_bytes(), before)
+        inspected = engine.enqueue_work(
+            domain=candidate.domain, candidate_id=candidate.candidate_id, action="inspect",
+            score_components={"priority_score": 0.5}, budget_estimate=0.0, now=NOW,
+        )
+        self.assertEqual(inspected.candidate_id, candidate.candidate_id)
+
+    def test_completion_requires_artifact_backed_authorized_verifier_receipt(self):
+        engine = self.engine()
+        work = self.enqueue(engine, key="proof-contract")
+        leased = engine.lease_work(
+            work.work_id, owner="worker", ttl_seconds=60, now=NOW, lease_token="proof-token"
+        )
+        before = engine.ledger.path.read_bytes()
+        unauthorized = self.proof_receipt(work, verifier="self-declared-worker")
+        with self.assertRaises(ValueError):
+            engine.complete_work(
+                work.work_id, owner="worker", lease_token="proof-token",
+                lease_generation=leased.lease_generation, proof_receipt=unauthorized, now=NOW,
+            )
+        self.assertEqual(engine.ledger.path.read_bytes(), before)
+
+        authorized = self.proof_receipt(work)
+        receipt_data = json.loads(Path(authorized).read_text(encoding="utf-8"))
+        Path(receipt_data["artifact_path"]).write_bytes(b"tampered\n")
+        with self.assertRaises(ValueError):
+            engine.complete_work(
+                work.work_id, owner="worker", lease_token="proof-token",
+                lease_generation=leased.lease_generation, proof_receipt=authorized, now=NOW,
+            )
+        self.assertEqual(engine.ledger.path.read_bytes(), before)
+
+        authorized = self.proof_receipt(work)
+        receipt_data = json.loads(Path(authorized).read_text(encoding="utf-8"))
+        done = engine.complete_work(
+            work.work_id, owner="worker", lease_token="proof-token",
+            lease_generation=leased.lease_generation, proof_receipt=authorized, now=NOW,
+        )
+        self.assertEqual(done.state, "done")
+        completion_event = engine.ledger.read_events()[-1]
+        self.assertEqual(completion_event["payload"]["proof"]["verifier"], "corpus-engine-verifier")
+        self.assertEqual(completion_event["payload"]["proof"]["artifact_sha256"], receipt_data["artifact_sha256"])
+
+    def test_replay_rejects_completion_from_verifier_outside_authorized_set(self):
+        engine = self.engine()
+        work = self.enqueue(engine, key="replay-verifier")
+        leased = engine.lease_work(
+            work.work_id, owner="worker", ttl_seconds=60, now=NOW, lease_token="proof-token"
+        )
+        engine.complete_work(
+            work.work_id, owner="worker", lease_token="proof-token",
+            lease_generation=leased.lease_generation,
+            proof_receipt=self.proof_receipt(work), now=NOW,
+        )
+        lines = engine.ledger.path.read_text(encoding="utf-8").splitlines()
+        forged = json.loads(lines[-1])
+        forged["payload"]["proof"]["verifier"] = "unauthorized-verifier"
+        lines[-1] = json.dumps(forged, sort_keys=True, separators=(",", ":"))
+        engine.ledger.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        with self.assertRaises(discovery.LedgerCorruptionError):
+            self.engine()
+
+    def test_replay_revalidates_receipt_and_artifact_bytes(self):
+        engine = self.engine()
+        work = self.enqueue(engine, key="replay-artifact")
+        leased = engine.lease_work(
+            work.work_id, owner="worker", ttl_seconds=60, now=NOW, lease_token="proof-token"
+        )
+        proof_receipt = self.proof_receipt(work)
+        engine.complete_work(
+            work.work_id, owner="worker", lease_token="proof-token",
+            lease_generation=leased.lease_generation,
+            proof_receipt=proof_receipt, now=NOW,
+        )
+        receipt = json.loads(Path(proof_receipt).read_text(encoding="utf-8"))
+        Path(receipt["artifact_path"]).write_bytes(b"post-completion tamper\n")
+        with self.assertRaises(discovery.LedgerCorruptionError):
+            self.engine()
+
     def test_duplicate_event_id_fails_closed(self):
         ledger = self.engine().ledger
         event = ledger.append("work_enqueued", {"work": self.pending_record().to_dict()}, recorded_at=NOW)
@@ -147,7 +295,10 @@ class DiscoveryAdversarialTests(unittest.TestCase):
         self.assertFalse(errors)
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         events = self.engine().ledger.read_events()
-        self.assertEqual([event["event_type"] for event in events], ["work_enqueued"])
+        self.assertEqual(
+            [event["event_type"] for event in events],
+            ["candidate_observed", "work_enqueued"],
+        )
 
     def test_distinct_idempotency_runs_coexist(self):
         engine = self.engine()
@@ -188,7 +339,7 @@ class DiscoveryAdversarialTests(unittest.TestCase):
             owner="worker-b",
             lease_token="token-b",
             lease_generation=second.lease_generation,
-            proof_receipt="fresh.json",
+            proof_receipt=self.proof_receipt(second),
             now=NOW + timedelta(seconds=3),
         )
         self.assertEqual(done.state, "done")
@@ -252,7 +403,7 @@ class DiscoveryAdversarialTests(unittest.TestCase):
         self.assertEqual(restarted.work_items[work.work_id].attempts, 1)
         self.assertEqual(
             [event["payload"].get("transition") for event in restarted.ledger.read_events()],
-            [None, "leased", "lease_expired"],
+            [None, None, "leased", "lease_expired"],
         )
 
 
