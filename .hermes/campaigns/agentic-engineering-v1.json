@@ -37,10 +37,10 @@
   },
   "manager_update_key": "versioned-doctrine-events-complete",
   "manager_update": {
-    "delivered": false,
-    "delivery_id": null,
-    "slack_ts": null,
-    "delivered_at": null
+    "delivered": true,
+    "delivery_id": "mgr_3ab5266b51134f1d",
+    "slack_ts": "1784275900.441059",
+    "delivered_at": "2026-07-17T08:11:49Z"
   },
-  "updated_at": "2026-07-17T08:10:04Z"
+  "updated_at": "2026-07-17T08:11:49Z"
 }
