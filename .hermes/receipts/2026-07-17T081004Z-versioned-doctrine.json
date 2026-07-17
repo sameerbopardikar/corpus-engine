@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-versioned-doctrine-20260717T081004Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "versioned-doctrine-events-complete",
+  "commit": "e466e53062897042477394a9a09ace17c9ffed54",
+  "diff_sha256": "35644d88b48a975ceb72cefd5441fc69e36c82061b5738e0f4d02694694e2c2b",
+  "recorded_at": "2026-07-17T08:10:04Z",
+  "summary": "Added a strict append-only doctrine ledger and deterministic projection for propose, alias, merge, split, revise, bound, supersede, deprecate, reject and restore events. Every concept remains external-corpus synthesis rather than Sameer-adopted doctrine; citations, aliases, prior versions, lineage edges and rollback history survive structural change.",
+  "tdd": {
+    "red": [
+      "corpus_doctrine module absent",
+      "unterminated valid tail incorrectly accepted a second append",
+      "self-consistent unknown payload field replayed instead of failing closed",
+      "restoring a pre-alias version left stale alias routing active"
+    ],
+    "focused_green": "python3 -m unittest tests/test_corpus_doctrine.py -v => 13 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 171 passed",
+    "static_green": "python3 -m compileall -q src tests && python3 -m json.tool schemas/doctrine-event-v1.json && git diff --check => passed"
+  },
+  "acceptance": {
+    "append_only_digest_chain": true,
+    "strict_payload_replay": true,
+    "exact_command_retry_physical_noop": true,
+    "alias_safe_merge_split": true,
+    "citation_preserving_supersession": true,
+    "contradiction_requires_explicit_bound": true,
+    "rejected_proposal_projection_noop": true,
+    "restore_alias_reconciliation": true,
+    "deterministic_lineage_replay": true,
+    "sameer_adopted_hard_false": true,
+    "llm_calls": 0,
+    "external_source_packages_acquired": 0
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_callers/code_blast returned not_built/not_found for new DoctrineEngine._mutate, _read_events and _apply symbols.",
+    "repository_search": "New module has no existing production callers; its public methods are exercised only by the new doctrine suite. No existing engine function was modified."
+  },
+  "production_effect": "None. No live corpus, default brain, GBrain source, scheduler, Expert/Percival runtime, credential, config or external system was mutated.",
+  "next_action": "Begin Task 10 with adversarial RED tests for deterministic raw-pointer/hash, citation, attribution, contradiction, freshness, duplicate, doctrine-lineage and cost evaluations, including prior-revision comparison."
+}
