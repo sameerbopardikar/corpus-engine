@@ -1,0 +1,450 @@
+#!/usr/bin/env python3
+"""Deterministic, rights-aware priority and budget policy for corpus work."""
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Iterable, Mapping
+
+from corpus_engine_models import CandidateRecord
+
+_SCHEMA_VERSION = 1
+_ALLOWED_RIGHTS = {
+    "public_rights_clear",
+    "public_metadata_only",
+    "private_authorized",
+    "rights_unclear",
+    "unknown",
+}
+_AUTO_ACQUIRE_RIGHTS = {"public_rights_clear"}
+_METADATA_RIGHTS = {"public_metadata_only"}
+_PRIVATE_RIGHTS = {"private_authorized"}
+
+
+def _finite_number(value: Any, name: str, *, minimum: float = 0.0) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be numeric")
+    result = float(value)
+    if not math.isfinite(result) or result < minimum:
+        raise ValueError(f"{name} must be finite and >= {minimum}")
+    return result
+
+
+def _positive_int(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _aware(value: datetime, name: str = "now") -> datetime:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+    return value.astimezone(timezone.utc)
+
+
+def _parse_iso(value: str, name: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-blank ISO timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be ISO-8601") from exc
+    return _aware(parsed, name)
+
+
+def _iso_seconds(value: datetime) -> str:
+    return _aware(value).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _strict_mapping(value: Any, name: str) -> Mapping[str, float]:
+    if not isinstance(value, dict) or not value:
+        raise ValueError(f"{name} must be a non-empty object")
+    normalized: dict[str, float] = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError(f"{name} keys must be non-blank strings")
+        normalized[key] = _finite_number(item, f"{name}.{key}")
+    return MappingProxyType(normalized)
+
+
+@dataclass(frozen=True)
+class PriorityPolicy:
+    schema_version: int
+    evidence_lane_weights: Mapping[str, float]
+    score_weights: Mapping[str, float]
+    max_items_per_cycle: int
+    max_deep_acquisitions_per_utc_day: int
+    max_llm_tasks_per_cycle: int
+    max_llm_tasks_per_utc_day: int
+    max_llm_tokens_per_utc_day: int
+    max_cost_usd_per_utc_day: float
+    retry_base_seconds: int
+    retry_max_seconds: int
+    retry_max_attempts: int
+    starvation_age_boost_per_day: float
+    starvation_max_boost: float
+    probationary_threshold: float
+    promotion_threshold: float
+    rejection_threshold: float
+    automatic_promotion_enabled: bool
+
+    def __post_init__(self) -> None:
+        if self.schema_version != _SCHEMA_VERSION:
+            raise ValueError(f"unsupported schema_version: {self.schema_version!r}")
+        object.__setattr__(self, "evidence_lane_weights", _strict_mapping(dict(self.evidence_lane_weights), "evidence_lane_weights"))
+        object.__setattr__(self, "score_weights", _strict_mapping(dict(self.score_weights), "score_weights"))
+        if "default" not in self.evidence_lane_weights:
+            raise ValueError("evidence_lane_weights must include default")
+        if self.evidence_lane_weights["default"] <= 0:
+            raise ValueError("evidence_lane_weights.default must be positive")
+        if sum(self.score_weights.values()) <= 0:
+            raise ValueError("score_weights must have a positive total")
+        for name in (
+            "max_items_per_cycle", "max_deep_acquisitions_per_utc_day",
+            "max_llm_tasks_per_cycle", "max_llm_tasks_per_utc_day",
+            "max_llm_tokens_per_utc_day", "retry_base_seconds",
+            "retry_max_seconds", "retry_max_attempts",
+        ):
+            object.__setattr__(self, name, _positive_int(getattr(self, name), name))
+        object.__setattr__(self, "max_cost_usd_per_utc_day", _finite_number(self.max_cost_usd_per_utc_day, "max_cost_usd_per_utc_day"))
+        object.__setattr__(self, "starvation_age_boost_per_day", _finite_number(self.starvation_age_boost_per_day, "starvation_age_boost_per_day"))
+        object.__setattr__(self, "starvation_max_boost", _finite_number(self.starvation_max_boost, "starvation_max_boost"))
+        for name in ("probationary_threshold", "promotion_threshold", "rejection_threshold"):
+            value = _finite_number(getattr(self, name), name)
+            if value > 1:
+                raise ValueError(f"{name} must be <= 1")
+            object.__setattr__(self, name, value)
+        if not self.rejection_threshold <= self.probationary_threshold <= self.promotion_threshold:
+            raise ValueError("thresholds must be ordered rejection <= probationary <= promotion")
+        if self.retry_max_seconds < self.retry_base_seconds:
+            raise ValueError("retry_max_seconds must be >= retry_base_seconds")
+        if not isinstance(self.automatic_promotion_enabled, bool):
+            raise ValueError("automatic_promotion_enabled must be boolean")
+
+    @classmethod
+    def default(cls) -> "PriorityPolicy":
+        return cls(
+            schema_version=1,
+            evidence_lane_weights={
+                "scientific-evaluation": 1.15,
+                "security-evaluation": 1.12,
+                "production-reliability": 1.10,
+                "production-architecture": 1.05,
+                "implementation-research": 1.00,
+                "practitioner-implementation": 0.95,
+                "unverified-discovery-signal": 0.55,
+                "default": 0.85,
+            },
+            score_weights={
+                "authority": 1.0,
+                "demonstrated_practice": 1.1,
+                "novelty": 1.0,
+                "relevance": 1.3,
+                "corroboration": 1.1,
+                "production_or_scientific_value": 1.3,
+            },
+            max_items_per_cycle=3,
+            max_deep_acquisitions_per_utc_day=3,
+            max_llm_tasks_per_cycle=1,
+            max_llm_tasks_per_utc_day=1,
+            max_llm_tokens_per_utc_day=50_000,
+            max_cost_usd_per_utc_day=1.0,
+            retry_base_seconds=300,
+            retry_max_seconds=86_400,
+            retry_max_attempts=5,
+            starvation_age_boost_per_day=0.03,
+            starvation_max_boost=0.30,
+            probationary_threshold=0.35,
+            promotion_threshold=0.65,
+            rejection_threshold=0.10,
+            automatic_promotion_enabled=False,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "evidence_lane_weights": dict(self.evidence_lane_weights),
+            "score_weights": dict(self.score_weights),
+            "max_items_per_cycle": self.max_items_per_cycle,
+            "max_deep_acquisitions_per_utc_day": self.max_deep_acquisitions_per_utc_day,
+            "max_llm_tasks_per_cycle": self.max_llm_tasks_per_cycle,
+            "max_llm_tasks_per_utc_day": self.max_llm_tasks_per_utc_day,
+            "max_llm_tokens_per_utc_day": self.max_llm_tokens_per_utc_day,
+            "max_cost_usd_per_utc_day": self.max_cost_usd_per_utc_day,
+            "retry_base_seconds": self.retry_base_seconds,
+            "retry_max_seconds": self.retry_max_seconds,
+            "retry_max_attempts": self.retry_max_attempts,
+            "starvation_age_boost_per_day": self.starvation_age_boost_per_day,
+            "starvation_max_boost": self.starvation_max_boost,
+            "probationary_threshold": self.probationary_threshold,
+            "promotion_threshold": self.promotion_threshold,
+            "rejection_threshold": self.rejection_threshold,
+            "automatic_promotion_enabled": self.automatic_promotion_enabled,
+        }
+
+    @classmethod
+    def from_file(cls, path: Path) -> "PriorityPolicy":
+        document = json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"non-finite JSON constant: {value}")))
+        if not isinstance(document, dict):
+            raise ValueError("policy must be a JSON object")
+        expected = set(cls.default().to_dict())
+        unknown = set(document) - expected
+        missing = expected - set(document)
+        if unknown:
+            raise ValueError(f"unknown policy fields: {sorted(unknown)}")
+        if missing:
+            raise ValueError(f"missing policy fields: {sorted(missing)}")
+        return cls(**document)
+
+
+@dataclass(frozen=True)
+class UsageSnapshot:
+    deep_acquisitions: int = 0
+    llm_tasks: int = 0
+    llm_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+
+    def __post_init__(self) -> None:
+        for name in ("deep_acquisitions", "llm_tasks", "llm_tokens"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        object.__setattr__(self, "estimated_cost_usd", _finite_number(self.estimated_cost_usd, "estimated_cost_usd"))
+
+
+@dataclass(frozen=True)
+class CandidateTask:
+    candidate: CandidateRecord
+    material_delta: bool = True
+    requires_llm: bool = False
+    estimated_llm_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+    failure_count: int = 0
+    last_attempted_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate, CandidateRecord):
+            raise ValueError("candidate must be a CandidateRecord")
+        if not isinstance(self.material_delta, bool) or not isinstance(self.requires_llm, bool):
+            raise ValueError("material_delta and requires_llm must be booleans")
+        if isinstance(self.estimated_llm_tokens, bool) or not isinstance(self.estimated_llm_tokens, int) or self.estimated_llm_tokens < 0:
+            raise ValueError("estimated_llm_tokens must be a non-negative integer")
+        object.__setattr__(self, "estimated_cost_usd", _finite_number(self.estimated_cost_usd, "estimated_cost_usd"))
+        if isinstance(self.failure_count, bool) or not isinstance(self.failure_count, int) or self.failure_count < 0:
+            raise ValueError("failure_count must be a non-negative integer")
+        if self.failure_count and self.last_attempted_at is None:
+            raise ValueError("failed work requires last_attempted_at")
+        if self.last_attempted_at is not None:
+            _parse_iso(self.last_attempted_at, "last_attempted_at")
+        if self.requires_llm and self.estimated_llm_tokens <= 0:
+            raise ValueError("LLM-bearing work requires a positive token estimate")
+        if not self.requires_llm and self.estimated_llm_tokens:
+            raise ValueError("estimated_llm_tokens requires requires_llm=true")
+
+
+@dataclass(frozen=True)
+class PriorityDecision:
+    candidate_id: str
+    canonical_url: str
+    action: str
+    evidence_score: float
+    priority_score: float
+    starvation_boost: float
+    scheduled: bool
+    auto_acquire_eligible: bool
+    auto_promote: bool
+    suggested_disposition: str
+    requires_llm: bool
+    estimated_llm_tokens: int
+    estimated_cost_usd: float
+    retry_after: str | None
+    reason_codes: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "candidate_id": self.candidate_id,
+            "canonical_url": self.canonical_url,
+            "action": self.action,
+            "evidence_score": self.evidence_score,
+            "priority_score": self.priority_score,
+            "starvation_boost": self.starvation_boost,
+            "scheduled": self.scheduled,
+            "auto_acquire_eligible": self.auto_acquire_eligible,
+            "auto_promote": self.auto_promote,
+            "suggested_disposition": self.suggested_disposition,
+            "requires_llm": self.requires_llm,
+            "estimated_llm_tokens": self.estimated_llm_tokens,
+            "estimated_cost_usd": self.estimated_cost_usd,
+            "retry_after": self.retry_after,
+            "reason_codes": list(self.reason_codes),
+        }
+
+
+@dataclass(frozen=True)
+class CyclePlan:
+    decisions: tuple[PriorityDecision, ...]
+    selected: tuple[PriorityDecision, ...]
+    deep_acquisitions_scheduled: int
+    llm_tasks_scheduled: int
+    llm_tokens_scheduled: int
+    estimated_cost_usd: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decisions": [item.to_dict() for item in self.decisions],
+            "selected_candidate_ids": [item.candidate_id for item in self.selected],
+            "deep_acquisitions_scheduled": self.deep_acquisitions_scheduled,
+            "llm_tasks_scheduled": self.llm_tasks_scheduled,
+            "llm_tokens_scheduled": self.llm_tokens_scheduled,
+            "estimated_cost_usd": self.estimated_cost_usd,
+        }
+
+
+def _score(task: CandidateTask, policy: PriorityPolicy, now: datetime) -> tuple[float, float, float]:
+    record = task.candidate
+    weighted = 0.0
+    weight_total = 0.0
+    for component, weight in policy.score_weights.items():
+        weighted += record.score_components.get(component, 0.0) * weight
+        weight_total += weight
+    quality = weighted / weight_total
+    lane_weight = policy.evidence_lane_weights.get(record.evidence_lane, policy.evidence_lane_weights["default"])
+    evidence_score = quality * lane_weight
+    age_days = max((_aware(now) - _parse_iso(record.first_seen_at, "first_seen_at")).total_seconds() / 86_400, 0.0)
+    starvation = min(age_days * policy.starvation_age_boost_per_day, policy.starvation_max_boost)
+    cost_factor = 1.0 + task.estimated_cost_usd
+    return (evidence_score + starvation) / cost_factor, evidence_score, starvation
+
+
+def _disposition(score: float, policy: PriorityPolicy) -> str:
+    if score < policy.rejection_threshold:
+        return "reject"
+    if score >= policy.promotion_threshold:
+        return "promotion_eligible"
+    if score >= policy.probationary_threshold:
+        return "probationary"
+    return "inspect_only"
+
+
+def _retry_after(task: CandidateTask, policy: PriorityPolicy) -> datetime | None:
+    if task.failure_count == 0:
+        return None
+    if task.failure_count >= policy.retry_max_attempts:
+        return datetime.max.replace(tzinfo=timezone.utc)
+    delay = min(policy.retry_base_seconds * (2 ** (task.failure_count - 1)), policy.retry_max_seconds)
+    assert task.last_attempted_at is not None
+    return _parse_iso(task.last_attempted_at, "last_attempted_at") + timedelta(seconds=delay)
+
+
+def plan_cycle(
+    tasks: Iterable[CandidateTask],
+    policy: PriorityPolicy,
+    usage: UsageSnapshot,
+    *,
+    now: datetime,
+) -> CyclePlan:
+    current = _aware(now)
+    ranked: list[tuple[float, float, float, CandidateTask]] = []
+    seen: set[str] = set()
+    for task in tasks:
+        candidate_id = task.candidate.candidate_id
+        if candidate_id in seen:
+            raise ValueError(f"duplicate candidate task: {candidate_id}")
+        seen.add(candidate_id)
+        priority_score, evidence_score, starvation = _score(task, policy, current)
+        ranked.append((priority_score, evidence_score, starvation, task))
+    ranked.sort(key=lambda row: (-row[0], row[3].candidate.candidate_id))
+
+    decisions: list[PriorityDecision] = []
+    selected_count = 0
+    deep_count = 0
+    llm_count = 0
+    token_count = 0
+    cost_total = 0.0
+
+    for raw_score, evidence_score, starvation, task in ranked:
+        record = task.candidate
+        rights = record.rights_state
+        if rights not in _ALLOWED_RIGHTS:
+            rights = "unknown"
+        auto_acquire = rights in _AUTO_ACQUIRE_RIGHTS
+        action = "acquire" if auto_acquire else "inspect"
+        reasons: list[str] = []
+        retry_at = _retry_after(task, policy)
+
+        if not task.material_delta:
+            reasons.append("no_material_delta")
+        if rights in _PRIVATE_RIGHTS:
+            reasons.extend(("private_source_human_gate", "rights_not_publicly_acquirable"))
+        elif rights not in _AUTO_ACQUIRE_RIGHTS and rights not in _METADATA_RIGHTS:
+            reasons.append("rights_not_publicly_acquirable")
+        if retry_at == datetime.max.replace(tzinfo=timezone.utc):
+            reasons.append("retry_attempts_exhausted")
+        elif retry_at is not None and current < retry_at:
+            reasons.append("retry_backoff_active")
+
+        hard_block = bool(reasons)
+        if not hard_block and selected_count >= policy.max_items_per_cycle:
+            reasons.append("per_cycle_item_cap")
+        if not hard_block and action == "acquire" and usage.deep_acquisitions + deep_count >= policy.max_deep_acquisitions_per_utc_day:
+            reasons.append("daily_deep_acquisition_cap")
+        if not hard_block and task.requires_llm:
+            if llm_count >= policy.max_llm_tasks_per_cycle:
+                reasons.append("per_cycle_llm_task_cap")
+            elif usage.llm_tasks + llm_count >= policy.max_llm_tasks_per_utc_day:
+                reasons.append("daily_llm_task_cap")
+            elif usage.llm_tokens + token_count + task.estimated_llm_tokens > policy.max_llm_tokens_per_utc_day:
+                reasons.append("daily_llm_token_cap")
+        if not hard_block and usage.estimated_cost_usd + cost_total + task.estimated_cost_usd > policy.max_cost_usd_per_utc_day:
+            reasons.append("daily_cost_cap")
+
+        scheduled = not reasons
+        disposition = _disposition(evidence_score, policy)
+        auto_promote = bool(
+            scheduled
+            and policy.automatic_promotion_enabled
+            and auto_acquire
+            and disposition == "promotion_eligible"
+        )
+        if disposition == "promotion_eligible" and not policy.automatic_promotion_enabled:
+            reasons.append("automatic_promotion_disabled")
+        if scheduled:
+            selected_count += 1
+            if action == "acquire":
+                deep_count += 1
+            if task.requires_llm:
+                llm_count += 1
+                token_count += task.estimated_llm_tokens
+            cost_total += task.estimated_cost_usd
+        decision = PriorityDecision(
+            candidate_id=record.candidate_id,
+            canonical_url=record.canonical_url,
+            action=action,
+            evidence_score=round(evidence_score, 8),
+            priority_score=round(raw_score, 8),
+            starvation_boost=round(starvation, 8),
+            scheduled=scheduled,
+            auto_acquire_eligible=auto_acquire,
+            auto_promote=auto_promote,
+            suggested_disposition=disposition,
+            requires_llm=task.requires_llm,
+            estimated_llm_tokens=task.estimated_llm_tokens,
+            estimated_cost_usd=task.estimated_cost_usd,
+            retry_after=None if retry_at is None or retry_at.year == datetime.max.year else _iso_seconds(retry_at),
+            reason_codes=tuple(reasons),
+        )
+        decisions.append(decision)
+
+    selected = tuple(item for item in decisions if item.scheduled)
+    return CyclePlan(
+        decisions=tuple(decisions),
+        selected=selected,
+        deep_acquisitions_scheduled=deep_count,
+        llm_tasks_scheduled=llm_count,
+        llm_tokens_scheduled=token_count,
+        estimated_cost_usd=round(cost_total, 8),
+    )
