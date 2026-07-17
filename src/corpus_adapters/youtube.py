@@ -8,8 +8,9 @@ import re
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import requests
 
@@ -106,6 +107,31 @@ def inventory_revision(items: list[dict[str, str]]) -> str:
     return sha256_bytes(stable)
 
 
+def encode_inventory_cursor(*, watermark: str, pending_inventory: list[str]) -> str:
+    document = {"pending_inventory": pending_inventory, "v": 1, "watermark": watermark}
+    return "yt1:" + json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def decode_inventory_cursor(cursor: str | None) -> dict[str, Any]:
+    if cursor is None:
+        return {"v": 1, "watermark": "", "pending_inventory": []}
+    if cursor.startswith("yt1:"):
+        document = json.loads(cursor[4:])
+        if set(document) != {"pending_inventory", "v", "watermark"} or document["v"] != 1:
+            raise ValueError("invalid YouTube inventory cursor schema")
+        if not isinstance(document["watermark"], str) or not document["watermark"]:
+            raise ValueError("invalid YouTube inventory cursor watermark")
+        pending = document["pending_inventory"]
+        if not isinstance(pending, list) or any(not isinstance(value, str) or not value for value in pending):
+            raise ValueError("invalid YouTube pending inventory")
+        if len(pending) != len(set(pending)):
+            raise ValueError("duplicate YouTube pending inventory id")
+        return document
+    if "|" in cursor and cursor.rsplit("|", 1)[1]:
+        return {"v": 1, "watermark": cursor.rsplit("|", 1)[1], "pending_inventory": []}
+    raise ValueError("invalid YouTube inventory cursor")
+
+
 def normalize_caption_vtt(raw: str) -> str:
     """Normalize native VTT only; reject page summaries masquerading as transcripts."""
     if not raw.lstrip("\ufeff").startswith("WEBVTT"):
@@ -125,6 +151,23 @@ def normalize_caption_vtt(raw: str) -> str:
             continue
         lines.append(line)
     return "\n".join(lines).strip() + "\n"
+
+
+@dataclass(frozen=True, slots=True)
+class CaptionArtifacts:
+    raw_path: Path
+    raw_sha256: str
+    normalized_path: Path
+    normalized_sha256: str
+
+
+def preserve_caption_artifacts(root: Path, video_id: str, raw_vtt: bytes) -> CaptionArtifacts:
+    if not video_id.strip():
+        raise ValueError("video_id must be non-blank")
+    normalized = normalize_caption_vtt(raw_vtt.decode("utf-8", errors="replace")).encode("utf-8")
+    raw_path = preserve_bytes(Path(root) / "raw", prefix=video_id, suffix=".vtt", body=raw_vtt)
+    normalized_path = preserve_bytes(Path(root) / "normalized", prefix=video_id, suffix=".txt", body=normalized)
+    return CaptionArtifacts(raw_path, sha256_bytes(raw_vtt), normalized_path, sha256_bytes(normalized))
 
 
 def write_revision_guarded(path: Path, content: bytes, *, source_revision: str, prior_revision: str | None) -> bool:
@@ -182,7 +225,7 @@ class YouTubeFeedAdapter(SourceAdapter):
             suffix = ".xml"
             items = parse_feed(body)
         except Exception:
-            body = self.inventory_fetch(self.channel_id, request.max_items, request.timeout_seconds)
+            body = self.inventory_fetch(self.channel_id, 100, request.timeout_seconds)
             final_url = f"https://www.youtube.com/channel/{self.channel_id}/videos"
             suffix = ".json"
             items = parse_inventory(body)
@@ -200,7 +243,25 @@ class YouTubeFeedAdapter(SourceAdapter):
         items = parse_inventory(payload.body)
         if inventory_revision(items) != payload.source_revision:
             raise ValueError("feed inventory revision mismatch")
-        bounded = items[: request.max_items]
+        by_id = {item["video_id"]: item for item in items}
+        state = decode_inventory_cursor(request.cursor)
+        watermark = str(state["watermark"])
+        pending = [value for value in state["pending_inventory"] if value in by_id]
+        new_ids: list[str] = []
+        if request.cursor is None:
+            new_ids = [item["video_id"] for item in items]
+            watermark = items[0]["video_id"] if items else "empty"
+        else:
+            for item in items:
+                if item["video_id"] == watermark:
+                    break
+                new_ids.append(item["video_id"])
+            if new_ids:
+                watermark = new_ids[0]
+        candidate_ids = list(dict.fromkeys([*new_ids, *pending]))
+        emitted_ids = candidate_ids[: request.max_items]
+        remaining_ids = candidate_ids[request.max_items :]
+        bounded = [by_id[video_id] for video_id in emitted_ids]
         observations: list[NormalizedObservation] = []
         for item in bounded:
             normalized = (json.dumps(item, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
@@ -220,7 +281,5 @@ class YouTubeFeedAdapter(SourceAdapter):
                     rights_state=spec.rights_state,
                 )
             )
-        cursor = request.cursor
-        if bounded:
-            cursor = f"{bounded[0]['published']}|{bounded[0]['video_id']}"
+        cursor = encode_inventory_cursor(watermark=watermark, pending_inventory=remaining_ids)
         return tuple(observations), cursor

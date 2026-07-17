@@ -146,6 +146,8 @@ class AdapterRunner:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 state = self._read_state()
                 source_state = state["sources"].get(batch.source_id, {"cursor": None, "batches": []})
+                if not batch.observations and batch.cursor_before == batch.cursor_after == source_state.get("cursor"):
+                    return batch
                 for prior in source_state.get("batches", []):
                     if prior.get("batch_id") == batch.batch_id:
                         # Accept either an exact replay of the original command

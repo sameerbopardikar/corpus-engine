@@ -15,7 +15,16 @@ if str(SRC) not in sys.path:
 
 from corpus_adapters.base import AdapterRunner
 from corpus_adapters.types import InventoryRequest, RightsState, SourceSpec
-from corpus_adapters.youtube import YouTubeFeedAdapter, inventory_revision, normalize_caption_vtt, parse_feed, parse_inventory, write_revision_guarded
+from corpus_adapters.youtube import (
+    YouTubeFeedAdapter,
+    decode_inventory_cursor,
+    inventory_revision,
+    normalize_caption_vtt,
+    parse_feed,
+    parse_inventory,
+    preserve_caption_artifacts,
+    write_revision_guarded,
+)
 
 
 FEED = b'''<?xml version="1.0" encoding="UTF-8"?>
@@ -73,7 +82,8 @@ class YouTubeFeedAdapterTests(unittest.TestCase):
             before = (root / "state.json").read_bytes()
             second = runner.run(adapter, spec, InventoryRequest(max_items=1, cursor=first.cursor_after))
 
-            self.assertEqual(first.batch_id, second.batch_id)
+            self.assertEqual(second.observations, ())
+            self.assertEqual(second.cursor_before, second.cursor_after)
             self.assertEqual((root / "state.json").read_bytes(), before)
             self.assertEqual(len(json.loads(before)["sources"]["channel"]["batches"]), 1)
 
@@ -108,7 +118,7 @@ class YouTubeFeedAdapterTests(unittest.TestCase):
             spec = SourceSpec("channel", "agentic-engineering", "youtube", "https://www.youtube.com/channel/channel", "practitioner", RightsState.PUBLIC_METADATA_ONLY)
             batch = AdapterRunner(root / "state.json").run(adapter, spec, InventoryRequest(max_items=1, timeout_seconds=17))
 
-            self.assertEqual(calls, [("channel", 1, 17.0)])
+            self.assertEqual(calls, [("channel", 100, 17.0)])
             self.assertEqual([item.title for item in batch.observations], ["New video"])
             self.assertTrue(Path(batch.observations[0].raw_pointer).name.endswith(".json"))
 
@@ -123,7 +133,46 @@ class YouTubeFeedAdapterTests(unittest.TestCase):
             self.assertEqual(batch.observations[0].title, "New video")
             self.assertEqual(batch.observations[0].content_kind, "video_metadata")
             self.assertNotIn("transcript", Path(batch.observations[0].normalized_pointer).read_text(encoding="utf-8").lower())
-            self.assertEqual(batch.cursor_after, "2026-07-17T01:00:00Z|new-video")
+            cursor = decode_inventory_cursor(batch.cursor_after)
+            self.assertEqual(cursor["watermark"], "new-video")
+            self.assertEqual(cursor["pending_inventory"], ["older-video"])
+
+    def test_inventory_cursor_emits_initial_backlog_once_then_only_new_items(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            adapter = YouTubeFeedAdapter(root / "raw", channel_id="channel", http_get=lambda url, timeout: Response(), fetched_at=lambda: "2026-07-17T06:00:00Z")
+            spec = SourceSpec("channel", "agentic-engineering", "youtube", "https://www.youtube.com/channel/channel", "practitioner", RightsState.PUBLIC_METADATA_ONLY)
+            runner = AdapterRunner(root / "state.json")
+
+            first = runner.run(adapter, spec, InventoryRequest(max_items=1))
+            second = runner.run(adapter, spec, InventoryRequest(max_items=1, cursor=first.cursor_after))
+            before = (root / "state.json").read_bytes()
+            third = runner.run(adapter, spec, InventoryRequest(max_items=1, cursor=second.cursor_after))
+
+            self.assertEqual([item.title for item in first.observations], ["New video"])
+            self.assertEqual([item.title for item in second.observations], ["Older video"])
+            self.assertEqual(third.observations, ())
+            self.assertEqual(third.cursor_before, third.cursor_after)
+            self.assertEqual((root / "state.json").read_bytes(), before)
+            self.assertNotEqual(first.source_revision, first.cursor_after)
+
+    def test_caption_artifacts_are_content_addressed_and_historical_revisions_survive(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            first_raw = b"WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFirst revision\n"
+            second_raw = b"WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nCorrected revision\n"
+
+            first = preserve_caption_artifacts(root, "video-1", first_raw)
+            second = preserve_caption_artifacts(root, "video-1", second_raw)
+
+            self.assertNotEqual(first.raw_path, second.raw_path)
+            self.assertNotEqual(first.normalized_path, second.normalized_path)
+            self.assertEqual(first.raw_sha256, hashlib.sha256(first_raw).hexdigest())
+            self.assertEqual(second.raw_sha256, hashlib.sha256(second_raw).hexdigest())
+            self.assertEqual(first.raw_path.read_bytes(), first_raw)
+            self.assertEqual(second.raw_path.read_bytes(), second_raw)
+            self.assertEqual(first.normalized_path.read_text(encoding="utf-8"), "First revision\n")
+            self.assertEqual(second.normalized_path.read_text(encoding="utf-8"), "Corrected revision\n")
 
     def test_vtt_rollups_are_deduplicated_but_page_summary_cannot_be_used_as_transcript(self):
         vtt = """WEBVTT

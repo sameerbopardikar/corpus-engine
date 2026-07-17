@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -34,7 +35,7 @@ from corpus_adapters.base import AdapterRunner, SourceAdapter
 from corpus_adapters.github import GitHubRepositoryAdapter
 from corpus_adapters.types import InventoryRequest, RightsState, SourceSpec
 from corpus_adapters.web import WebDocumentAdapter
-from corpus_adapters.youtube import YouTubeFeedAdapter, inventory_revision, normalize_caption_vtt, parse_feed
+from corpus_adapters.youtube import YouTubeFeedAdapter, inventory_revision, normalize_caption_vtt, parse_feed, preserve_caption_artifacts
 
 CORPUS_REPO = Path(os.environ.get("CORPUS_REPO", "/root/corpora"))
 ARCHIVE_ROOT = Path(os.environ.get("CORPUS_ARCHIVE_ROOT", "/root/exports/thinker-corpora"))
@@ -274,7 +275,12 @@ class CorpusEngine:
 
     def refresh_web(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
         locator = entry["url"]
-        adapter = WebDocumentAdapter(self.source_dir(entry["id"]), http_get=request, fetched_at=iso)
+        adapter = WebDocumentAdapter(
+            self.source_dir(entry["id"]),
+            http_get=request,
+            fetched_at=iso,
+            minimum_text_chars=int(entry.get("minimum_text_chars", 200)),
+        )
         spec = self.source_spec(entry, family="web", locator=locator)
         batch = self.run_adapter(entry, adapter, spec, max_items=1)
         observation = batch.observations[0]
@@ -338,21 +344,21 @@ class CorpusEngine:
 
     def acquire_youtube_transcript(self, video_id: str, destination: Path) -> tuple[Path | None, str | None]:
         destination.mkdir(parents=True, exist_ok=True)
-        template = str(destination / f"{video_id}.%(ext)s")
-        cmd = [
-            "yt-dlp", "--cookies-from-browser", "chromium:/root/.hermes/browser-profiles/youtube-takeout-sameer",
-            "--ignore-no-formats", "--skip-download", "--write-subs", "--write-auto-subs",
-            "--sub-langs", "en-orig,en,en.*", "--sub-format", "vtt", "-o", template,
-            f"https://www.youtube.com/watch?v={video_id}",
-        ]
-        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=180)
-        candidates = sorted(destination.glob(f"{video_id}*.vtt"))
-        if not candidates:
-            return None, (proc.stderr or proc.stdout)[-1200:]
-        raw_path = candidates[0]
-        clean_path = destination / f"{video_id}.transcript.txt"
-        clean_path.write_text(vtt_to_text(raw_path.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
-        return clean_path, None
+        with tempfile.TemporaryDirectory(prefix=f"caption-{slugify(video_id)}-", dir=destination) as temporary:
+            temporary_root = Path(temporary)
+            template = str(temporary_root / f"{video_id}.%(ext)s")
+            cmd = [
+                "yt-dlp", "--cookies-from-browser", "chromium:/root/.hermes/browser-profiles/youtube-takeout-sameer",
+                "--ignore-no-formats", "--skip-download", "--write-subs", "--write-auto-subs",
+                "--sub-langs", "en-orig,en,en.*", "--sub-format", "vtt", "-o", template,
+                f"https://www.youtube.com/watch?v={video_id}",
+            ]
+            proc = subprocess.run(cmd, text=True, capture_output=True, timeout=180)
+            candidates = sorted(temporary_root.glob(f"{video_id}*.vtt"))
+            if not candidates:
+                return None, (proc.stderr or proc.stdout)[-1200:]
+            artifacts = preserve_caption_artifacts(destination, video_id, candidates[0].read_bytes())
+            return artifacts.normalized_path, None
 
     def prior_youtube_revision(self, entry: dict[str, Any], prior: dict[str, Any] | None) -> str | None:
         if not prior:
@@ -368,6 +374,30 @@ class CorpusEngine:
             return inventory_revision(parse_feed(legacy_feed.read_bytes()))
         return prior_hash
 
+    def pending_youtube_items(self, prior: dict[str, Any] | None) -> list[dict[str, str]]:
+        items: list[dict[str, str]] = []
+        for slug in (prior or {}).get("pages", []):
+            path = CORPUS_REPO / f"{slug}.md"
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if not re.search(r'^transcript_status:\s*["\']pending["\']\s*$', text, re.MULTILINE):
+                continue
+            def field(name: str, default: str = "") -> str:
+                match = re.search(rf'^{re.escape(name)}:\s*["\']([^"\']*)["\']\s*$', text, re.MULTILINE)
+                return match.group(1) if match else default
+            video_id = field("video_id")
+            if video_id:
+                items.append(
+                    {
+                        "video_id": video_id,
+                        "title": field("title", video_id),
+                        "published": field("published_at"),
+                        "url": field("source_url", f"https://www.youtube.com/watch?v={video_id}"),
+                    }
+                )
+        return items
+
     def refresh_youtube(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
         channel_id = entry["channel_id"]
         feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
@@ -378,61 +408,79 @@ class CorpusEngine:
         max_items = min(int(entry.get("max_items_per_refresh", 3)), 100)
         batch = self.run_adapter(entry, adapter, spec, max_items=max_items)
         prior_revision = self.prior_youtube_revision(entry, prior)
-        if prior_revision == batch.source_revision:
-            return RefreshResult(
-                entry["id"],
-                "unchanged",
-                list((prior or {}).get("pages", [])),
-                f"inventory revision unchanged; {len(batch.observations)} metadata items observed; transcription skipped",
-                batch.source_revision,
-                feed_url,
-            )
+        stable_inventory = prior_revision == batch.source_revision
 
-        pages: list[str] = []
+        work_items: list[tuple[dict[str, str], Any | None]] = []
+        if stable_inventory:
+            work_items = [(item, None) for item in self.pending_youtube_items(prior)]
+            if not work_items:
+                return RefreshResult(
+                    entry["id"], "unchanged", list((prior or {}).get("pages", [])),
+                    "inventory revision unchanged; no pending captions", batch.source_revision, feed_url,
+                )
+        else:
+            for observation in batch.observations:
+                item = json.loads(Path(observation.normalized_pointer).read_text(encoding="utf-8"))
+                work_items.append((item, observation))
+
+        pages: list[str] = list((prior or {}).get("pages", [])) if stable_inventory else []
         transcript_count = 0
-        for observation in batch.observations:
-            item = json.loads(Path(observation.normalized_pointer).read_text(encoding="utf-8"))
+        changed = False
+        can_acquire_body = spec.rights_state in {RightsState.PUBLIC_RIGHTS_CLEAR, RightsState.PRIVATE_AUTHORIZED}
+        for item, observation in work_items:
             transcript_path: Path | None = None
             transcript_error: str | None = None
-            if entry.get("acquire_transcripts", True):
+            if entry.get("acquire_transcripts", True) and can_acquire_body:
                 transcript_path, transcript_error = self.acquire_youtube_transcript(item["video_id"], raw_dir / "transcripts")
+            if stable_inventory and not transcript_path:
+                continue
             transcript = transcript_path.read_text(encoding="utf-8") if transcript_path else ""
             if transcript_path:
                 transcript_count += 1
-            raw_candidates = sorted((raw_dir / "transcripts").glob(f"{item['video_id']}*.vtt")) if transcript_path else []
-            raw_pointer = raw_candidates[0] if raw_candidates else Path(observation.raw_pointer)
-            raw_digest = sha256_bytes(raw_pointer.read_bytes())
-            normalized_digest = sha256_bytes(transcript.encode("utf-8")) if transcript else observation.normalized_sha256
-            normalized_pointer = str(transcript_path) if transcript_path else observation.normalized_pointer
+                changed = True
+            raw_candidates = sorted(
+                (raw_dir / "transcripts" / "raw").glob(f"{item['video_id']}-*.vtt"),
+                key=lambda path: path.stat().st_mtime_ns,
+                reverse=True,
+            ) if transcript_path else []
+            fallback_raw = Path(observation.raw_pointer) if observation is not None else None
+            raw_pointer = raw_candidates[0] if raw_candidates else fallback_raw
+            raw_digest = sha256_bytes(raw_pointer.read_bytes()) if raw_pointer and raw_pointer.exists() else None
+            normalized_digest = sha256_bytes(transcript.encode("utf-8")) if transcript else (observation.normalized_sha256 if observation is not None else None)
+            normalized_pointer = str(transcript_path) if transcript_path else (observation.normalized_pointer if observation is not None else None)
+            if transcript_path:
+                transcript_status = "acquired"
+            elif can_acquire_body:
+                transcript_status = "pending"
+            else:
+                transcript_status = "not_authorized_metadata_only"
             boundary = "Practitioner evidence. A demonstrated workflow is stronger than an unsupported claim, but neither becomes doctrine without comparison or local verification."
             body = (
                 f"> **Epistemic boundary:** {boundary}\n\n"
                 f"Channel: **{entry.get('title', entry['id'])}**\nPublished: `{item['published']}`\nVideo: <{item['url']}>\n\n"
-                f"Transcript status: **{'acquired' if transcript_path else 'pending'}**.\n"
+                f"Transcript status: **{transcript_status}**.\n"
             )
             if transcript_error and not transcript_path:
                 body += "\nCaption acquisition did not produce a transcript in this pass; the shared fallback ladder remains queued.\n"
             if transcript:
                 body += f"\n## Transcript\n\n{transcript[:60000]}"
-            pages.append(
-                self.write_card(
-                    entry,
-                    item["title"],
-                    body,
-                    item["url"],
-                    raw_pointer,
-                    raw_digest,
-                    suffix=item["video_id"],
-                    extra={
-                        "video_id": item["video_id"],
-                        "published_at": item["published"],
-                        "transcript_status": "acquired" if transcript_path else "pending",
-                        "source_revision": batch.source_revision,
-                        "normalized_storage_path": normalized_pointer,
-                        "normalized_sha256": normalized_digest,
-                    },
-                )
+            slug = self.write_card(
+                entry, item["title"], body, item["url"], raw_pointer, raw_digest,
+                suffix=item["video_id"],
+                extra={
+                    "video_id": item["video_id"], "published_at": item["published"],
+                    "transcript_status": transcript_status, "source_revision": batch.source_revision,
+                    "normalized_storage_path": normalized_pointer, "normalized_sha256": normalized_digest,
+                },
             )
+            if slug not in pages:
+                pages.append(slug)
+
+        if stable_inventory:
+            status = "refreshed" if changed else "unchanged"
+            detail = f"stable inventory; {transcript_count} pending captions acquired" if changed else "stable inventory; pending captions remain"
+            return RefreshResult(entry["id"], status, pages, detail, batch.source_revision, feed_url)
+
         channel_body = (
             "> **Epistemic boundary:** Practitioner/operator lane. Source credibility is evaluated per topic and claim.\n\n"
             f"Channel feed: <{feed_url}>\n\n"
@@ -441,10 +489,7 @@ class CorpusEngine:
         feed_path = Path(batch.observations[0].raw_pointer) if batch.observations else raw_dir / "missing-feed"
         pages.append(
             self.write_card(
-                entry,
-                entry.get("title", entry["id"]),
-                channel_body,
-                feed_url,
+                entry, entry.get("title", entry["id"]), channel_body, feed_url,
                 feed_path if feed_path.exists() else None,
                 sha256_bytes(feed_path.read_bytes()) if feed_path.exists() else None,
                 extra={"source_revision": batch.source_revision},

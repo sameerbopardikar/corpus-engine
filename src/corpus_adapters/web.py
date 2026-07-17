@@ -8,9 +8,9 @@ from typing import Callable
 
 import requests
 
-from .base import SourceAdapter
+from .base import AdapterFailure, SourceAdapter
 from .common import preserve_bytes, sha256_bytes
-from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
+from .types import FailureKind, InventoryRequest, NormalizedObservation, RightsState, SourceSpec, TransportPayload
 
 
 class _VisibleTextParser(HTMLParser):
@@ -64,12 +64,24 @@ def _default_get(url: str, timeout: float):
 class WebDocumentAdapter(SourceAdapter):
     family = "web"
 
-    def __init__(self, raw_root: Path, *, http_get: Callable = _default_get, fetched_at: Callable[[], str]):
+    def __init__(
+        self,
+        raw_root: Path,
+        *,
+        http_get: Callable = _default_get,
+        fetched_at: Callable[[], str],
+        minimum_text_chars: int = 1,
+    ):
+        if isinstance(minimum_text_chars, bool) or not isinstance(minimum_text_chars, int) or minimum_text_chars < 1:
+            raise ValueError("minimum_text_chars must be a positive integer")
         self.raw_root = Path(raw_root)
         self.http_get = http_get
         self.fetched_at = fetched_at
+        self.minimum_text_chars = minimum_text_chars
 
     def fetch(self, spec: SourceSpec, request: InventoryRequest) -> TransportPayload:
+        if spec.rights_state not in {RightsState.PUBLIC_RIGHTS_CLEAR, RightsState.PRIVATE_AUTHORIZED}:
+            raise AdapterFailure(FailureKind.CONTRACT, "full web documents require body-acquisition rights")
         response = self.http_get(spec.canonical_locator, request.timeout_seconds)
         body = response.content
         content_type = response.headers.get("content-type", "").lower()
@@ -93,6 +105,8 @@ class WebDocumentAdapter(SourceAdapter):
             parser.feed(payload.body.decode("utf-8", errors="replace"))
             text = parser.text()
             title = parser.title or spec.source_id
+        if len(text.strip()) < self.minimum_text_chars:
+            raise ValueError(f"normalized text too short: {len(text.strip())} chars")
         normalized = text.encode("utf-8")
         normalized_path = preserve_bytes(self.raw_root, prefix="normalized", suffix=".txt", body=normalized)
         observation = NormalizedObservation(

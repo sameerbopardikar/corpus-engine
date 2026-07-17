@@ -26,6 +26,38 @@ class Response:
 
 
 class WebDocumentAdapterTests(unittest.TestCase):
+    def test_metadata_only_web_source_is_rejected_before_body_fetch(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            calls = []
+            adapter = WebDocumentAdapter(
+                root / "raw",
+                http_get=lambda url, timeout: calls.append(url) or Response(b"full body"),
+                fetched_at=lambda: "2026-07-17T06:00:00Z",
+            )
+            spec = SourceSpec("guide", "agentic-engineering", "web", "https://example.com/guide", "canonical", RightsState.PUBLIC_METADATA_ONLY)
+
+            with self.assertRaisesRegex(Exception, "full web documents require body-acquisition rights"):
+                AdapterRunner(root / "state.json").run(adapter, spec, InventoryRequest(max_items=1))
+            self.assertEqual(calls, [])
+            self.assertFalse((root / "raw").exists())
+
+    def test_short_antibot_or_error_page_is_rejected_before_cursor_commit(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            raw = b"<html><title>Denied</title><body>Access denied.</body></html>"
+            adapter = WebDocumentAdapter(
+                root / "raw",
+                http_get=lambda url, timeout: Response(raw),
+                fetched_at=lambda: "2026-07-17T06:00:00Z",
+                minimum_text_chars=80,
+            )
+            spec = SourceSpec("guide", "agentic-engineering", "web", "https://example.com/guide", "canonical", RightsState.PUBLIC_RIGHTS_CLEAR)
+
+            with self.assertRaisesRegex(Exception, "normalized text too short"):
+                AdapterRunner(root / "state.json").run(adapter, spec, InventoryRequest(max_items=1))
+            self.assertFalse((root / "state.json").exists())
+
     def test_raw_and_normalized_hashes_are_distinct_and_both_resolve(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
