@@ -23,7 +23,7 @@ from corpus_engine_models import CandidateRecord
 from corpus_seed_loader import CandidateSeedBundle, ingest_candidate_seed, load_candidate_seed
 
 DEFAULT_CORPUS_ROOT = Path("/root/corpora/agentic-engineering")
-DEFAULT_STATE_ROOT = Path("/root/exports/thinker-corpora/agentic-engineering/self-expansion-v0")
+DEFAULT_STATE_ROOT = Path("/root/exports/thinker-corpora/agentic-engineering/self-expansion-v1")
 DEFAULT_OUTPUT_ROOT = DEFAULT_CORPUS_ROOT / "discovery" / "personal-v0"
 DEFAULT_SEED = Path(__file__).resolve().parents[1] / "docs" / "source-maps" / "agentic-engineering-seed-candidates.json"
 

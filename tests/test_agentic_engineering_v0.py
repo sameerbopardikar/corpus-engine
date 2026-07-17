@@ -9,12 +9,18 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from agentic_engineering_v0 import run_v0
+from agentic_engineering_v0 import DEFAULT_STATE_ROOT, run_v0
 from corpus_discovery import DiscoveryEngine
 from corpus_engine_models import CandidateObservation
 
 
 class AgenticEngineeringV0Tests(unittest.TestCase):
+    def test_default_state_uses_proof_enforced_v1_namespace(self):
+        self.assertEqual(
+            DEFAULT_STATE_ROOT,
+            Path("/root/exports/thinker-corpora/agentic-engineering/self-expansion-v1"),
+        )
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
