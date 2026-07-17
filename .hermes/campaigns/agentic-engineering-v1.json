@@ -62,5 +62,23 @@
     "slack_ts": "1784279373.369669",
     "delivered_at": "2026-07-17T09:09:40Z"
   },
-  "updated_at": "2026-07-17T09:09:40Z"
+  "finish_controller": {
+    "job_id": "fbf435e265a4",
+    "status": "paused",
+    "paused_at": "2026-07-17T12:17:28Z",
+    "reason": "Campaign is verified_complete; continuing metabolism belongs only to corpus-engine-cycle."
+  },
+  "final_read_only_reverification": {
+    "verified_at": "2026-07-17T12:17:28Z",
+    "head": "813c9668f33142d7e55e5909c882c98735360849",
+    "focused_tests": "16 passed",
+    "full_worktree_tests": "195 passed",
+    "frozen_release_tests": "195 passed",
+    "release_import": "passed with release src on PYTHONPATH",
+    "raw_and_corpus_hash_readback": "passed",
+    "source_scoped_retrieval": "AgentDojo first at score 0.8864",
+    "dashboard_readback": "current and AgentDojo remains probationary",
+    "scheduler": "exactly one active corpus-engine-cycle; last run ok; gateway scheduler healthy"
+  },
+  "updated_at": "2026-07-17T12:17:28Z"
 }
