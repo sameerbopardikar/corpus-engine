@@ -234,6 +234,23 @@ class CorpusPriorityTests(unittest.TestCase):
                 ledger.reserve_cycle("cycle-one", [conflicting], self.policy, now=NOW)
             self.assertEqual(path.read_bytes(), before)
 
+    def test_budget_ledger_rejects_forged_accounting(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "budget.json"
+            ledger = BudgetLedger(path)
+            task = CandidateTask(
+                candidate("metered"),
+                requires_llm=True,
+                estimated_llm_tokens=50_000,
+                estimated_cost_usd=1.0,
+            )
+            ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["reservations"]["cycle-one"]["plan"]["llm_tokens_scheduled"] = 0
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "inconsistent stored cycle plan"):
+                ledger.usage_for_day(NOW)
+
 
 if __name__ == "__main__":
     unittest.main()

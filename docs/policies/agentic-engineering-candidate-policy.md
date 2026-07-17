@@ -6,7 +6,7 @@ This policy controls deterministic candidate ranking and work admission. It does
 
 - Rank from candidate evidence scores, evidence-lane weight, bounded age/starvation boost, and estimated dollar cost.
 - Break ties by canonical candidate ID, so input order cannot change the plan.
-- Age boost is capped. It prevents indefinite starvation without allowing stale low-quality evidence to dominate forever.
+- Age boost is capped. Once an eligible candidate reaches that cap, the oldest eligible candidate owns one reserved aging slot in the cycle; evidence quality still controls disposition and promotion.
 
 ## Rights and action boundaries
 
@@ -26,13 +26,14 @@ The checked-in V1 defaults are hard caps:
 - 50,000 LLM tokens per UTC day.
 - $1.00 estimated model cost per UTC day.
 
-A candidate is admitted only if the complete task estimate fits the remaining cap. Caps do not overdraw and are evaluated before work starts. No-material-delta candidates schedule no work, including no LLM work.
+A candidate is admitted only if the complete task estimate fits the remaining cap. The `BudgetLedger` locks one daily state authority, derives usage from prior reservations, and durably reserves deep-acquisition, LLM-task, token, and estimated-cost capacity before work starts. Exact reservation retries are byte-no-ops; conflicting reuse fails closed. No-material-delta candidates schedule no work, including no LLM work.
 
 ## Retry and starvation
 
 - Retry begins at 300 seconds and doubles per failure, capped at 24 hours.
 - Five failures exhaust automatic retry and require a later explicit recovery path.
 - Eligible old candidates receive `0.03` priority per waiting day, capped at `0.30`.
+- At the cap, the oldest eligible candidate receives the cycle's reserved aging slot so repeated fresh high-score arrivals cannot starve it indefinitely.
 - Cost-normalized ranking ensures one expensive candidate cannot indefinitely crowd out cheaper high-yield evidence.
 
 ## Promotion boundary
@@ -54,4 +55,5 @@ Decisions expose machine-readable causes, including:
 - `daily_llm_task_cap`
 - `daily_llm_token_cap`
 - `daily_cost_cap`
+- `reserved_aging_slot`
 - `automatic_promotion_disabled`

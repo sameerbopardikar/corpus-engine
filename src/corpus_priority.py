@@ -382,6 +382,36 @@ class CyclePlan:
         if len(by_id) != len(decisions) or any(item not in by_id for item in selected_ids):
             raise ValueError("stored cycle plan has invalid candidate identities")
         selected = tuple(by_id[item] for item in selected_ids)
+        expected_selected = tuple(item for item in decisions if item.scheduled)
+        expected_ids = [item.candidate_id for item in expected_selected]
+        for item in decisions:
+            if (
+                type(item.scheduled) is not bool
+                or type(item.requires_llm) is not bool
+                or item.action not in {"acquire", "inspect"}
+                or isinstance(item.estimated_llm_tokens, bool)
+                or not isinstance(item.estimated_llm_tokens, int)
+                or item.estimated_llm_tokens < 0
+                or isinstance(item.estimated_cost_usd, bool)
+                or not isinstance(item.estimated_cost_usd, (int, float))
+                or not math.isfinite(float(item.estimated_cost_usd))
+                or item.estimated_cost_usd < 0
+            ):
+                raise ValueError("invalid stored priority decision accounting")
+        expected_deep = sum(item.action == "acquire" for item in expected_selected)
+        expected_llm_tasks = sum(item.requires_llm for item in expected_selected)
+        expected_tokens = sum(
+            item.estimated_llm_tokens for item in expected_selected if item.requires_llm
+        )
+        expected_cost = round(sum(item.estimated_cost_usd for item in expected_selected), 8)
+        if (
+            selected_ids != expected_ids
+            or data["deep_acquisitions_scheduled"] != expected_deep
+            or data["llm_tasks_scheduled"] != expected_llm_tasks
+            or data["llm_tokens_scheduled"] != expected_tokens
+            or data["estimated_cost_usd"] != expected_cost
+        ):
+            raise ValueError("inconsistent stored cycle plan accounting")
         return cls(
             decisions=decisions,
             selected=selected,
