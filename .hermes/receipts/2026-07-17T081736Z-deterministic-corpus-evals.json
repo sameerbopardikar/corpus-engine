@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-deterministic-evals-20260717T081736Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "deterministic-corpus-evaluations-complete",
+  "commit": "6f089fecd9ab41bded7c8a40cccca4f944bcf458",
+  "diff_sha256": "225762f9c2409a904cb3b9a65ad0775cbdb717dbb9920043ac439fdaed5527ff",
+  "recorded_at": "2026-07-17T08:17:36Z",
+  "summary": "Added a strict no-LLM evaluator that binds raw and normalized artifact bytes to citations, attribution, source-scoped retrieval, contradiction surfacing, freshness, duplicate material, doctrine lineage, rights-safe promotion, cost caps, material yield and immutable prior-revision comparison.",
+  "tdd": {
+    "red": [
+      "corpus_eval module absent",
+      "source-scoped retrieval incorrectly counted an expected page returned by the default source as a hit"
+    ],
+    "focused_green": "python3 -m unittest tests/test_corpus_eval.py -q => 11 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -q => 182 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --check => passed"
+  },
+  "acceptance": {
+    "raw_and_normalized_pointer_hash_integrity": true,
+    "exact_citation_resolution": true,
+    "source_scoped_retrieval": true,
+    "lane_diversity_and_attribution_boundaries": true,
+    "contradiction_surfacing": true,
+    "freshness_and_duplicate_detection": true,
+    "false_promotion_detection": true,
+    "doctrine_lineage_reconstruction": true,
+    "daily_cost_and_llm_budget_enforcement": true,
+    "immutable_prior_revision_comparison": true,
+    "material_yield": true,
+    "deterministic_under_reordered_input": true,
+    "llm_calls": 0,
+    "external_source_packages_acquired": 0
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_callers returned not_built and code_blast returned not_found for the new evaluate_corpus symbol.",
+    "repository_search": "New module has no production callers; only tests/test_corpus_eval.py imports it. No existing engine function was modified."
+  },
+  "independent_review": {
+    "status": "not_completed_in_this_slice",
+    "detail": "A process-local read-only review was dispatched as deleg_21de4380 but had not returned a receipt before closure and is not treated as durable or active ownership.",
+    "reviewed_commit": null
+  },
+  "production_effect": "None. No live corpus, raw archive, GBrain source, scheduler, Expert/Percival runtime, credential, config or external system was mutated.",
+  "next_action": "After independent exact-commit review closes, begin Task 11 with adversarial RED tests for one restart-safe end-to-end shadow cycle and a stable receipt/next-gap projection."
+}

@@ -8,7 +8,7 @@
   "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
   "status": "executing",
   "terminal_semantics": "turn_finished_work_incomplete_durable_next_action",
-  "current_phase": "deterministic-corpus-evaluations",
+  "current_phase": "end-to-end-shadow-vertical",
   "authority": "single-writer controller in the named worktree",
   "production_boundary": "No Expert/Percival production mutation. Reversible backed-up deployment to the existing corpus-engine-cycle is allowed after current-byte tests and live shadow verification.",
   "completion_test": "A real unattended cycle discovers or selects a public rights-clear evidence candidate, acquires and preserves it, writes a GBrain corpus source artifact, emits a versioned doctrine decision, passes deterministic integrity/retrieval/lineage evaluations, records a receipt and selects the next gap; tests, source-scoped retrieval, dashboard readback, scheduler and rollback are verified.",
@@ -24,16 +24,18 @@
     "discovery replay validation for every work transition plus durable automatic expired-lease recovery before selection",
     "candidate/domain/rights queue admission, artifact-backed authorized completion proof, replay-time proof revalidation and exact append rollback/readback",
     "core adapter P1 remediation with versioned YouTube inventory cursors, bounded backlog exhaustion, stable pending-caption retry, content-addressed caption history, rights-enforced web acquisition and pre-commit minimum-content rejection",
-    "append-only versioned doctrine events with strict digest/payload replay, citation-preserving alias-safe merge/split/supersession, explicit contradiction bounding, rejected-proposal projection no-op and deterministic restore/lineage"
+    "append-only versioned doctrine events with strict digest/payload replay, citation-preserving alias-safe merge/split/supersession, explicit contradiction bounding, rejected-proposal projection no-op and deterministic restore/lineage",
+    "strict deterministic no-LLM corpus evaluations for artifact integrity, citation, source-scoped retrieval, attribution, contradiction, freshness, duplicates, false promotion, doctrine lineage, cost, material yield and immutable prior-revision comparison"
   ],
-  "next_action": "Begin Task 10 with adversarial RED tests for deterministic raw-pointer/hash, citation, attribution, contradiction, freshness, duplicate, doctrine-lineage and cost evaluations, including prior-revision comparison.",
+  "next_action": "Run an independent exact-commit review of 6f089fecd9ab41bded7c8a40cccca4f944bcf458, then begin Task 11 with adversarial RED tests for one restart-safe refresh -> rank -> acquire/normalize -> doctrine decision -> eval -> stable receipt -> next-gap shadow cycle.",
   "last_verified": {
-    "commit": "e466e53062897042477394a9a09ace17c9ffed54",
-    "diff_sha256": "35644d88b48a975ceb72cefd5441fc69e36c82061b5738e0f4d02694694e2c2b",
-    "focused_tests": "python3 -m unittest tests/test_corpus_doctrine.py -v => 13 passed",
-    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 171 passed",
-    "static": "python3 -m compileall -q src tests && python3 -m json.tool schemas/doctrine-event-v1.json && git diff --check => passed",
-    "receipt": ".hermes/receipts/2026-07-17T081004Z-versioned-doctrine.json"
+    "commit": "6f089fecd9ab41bded7c8a40cccca4f944bcf458",
+    "diff_sha256": "225762f9c2409a904cb3b9a65ad0775cbdb717dbb9920043ac439fdaed5527ff",
+    "focused_tests": "python3 -m unittest tests/test_corpus_eval.py -q => 11 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -q => 182 passed",
+    "static": "python3 -m compileall -q src tests && git diff --check => passed",
+    "receipt": ".hermes/receipts/2026-07-17T081736Z-deterministic-corpus-evals.json",
+    "independent_review": "not_completed_in_this_slice"
   },
   "manager_update_key": "versioned-doctrine-events-complete",
   "manager_update": {
@@ -42,5 +44,5 @@
     "slack_ts": "1784275900.441059",
     "delivered_at": "2026-07-17T08:11:49Z"
   },
-  "updated_at": "2026-07-17T08:11:49Z"
+  "updated_at": "2026-07-17T08:19:50Z"
 }
