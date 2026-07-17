@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-core-refresh-adapters-20260717T060134Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "web-github-youtube-adapters-complete",
+  "commit": "3af556dea31494740ff38c40aaee77cdfa98535a",
+  "diff_sha256": "fd02ee6667052bafad363bec398555d39dfaa7ea60e13e182e40c7fb9a79a0ea",
+  "recorded_at": "2026-07-17T06:01:34Z",
+  "summary": "Ported web, GitHub and YouTube refresh behavior behind the shared adapter ledger; separated raw and normalized hashes; pinned GitHub reads to immutable commits; preserved caption-rollup deduplication; added bounded yt-dlp public-inventory fallback for a live YouTube Atom-feed 404; and made no-delta adapter identity independent of retrieval time, local paths and transport-only envelope changes.",
+  "files": [
+    "src/corpus_adapters/base.py",
+    "src/corpus_adapters/common.py",
+    "src/corpus_adapters/github.py",
+    "src/corpus_adapters/types.py",
+    "src/corpus_adapters/web.py",
+    "src/corpus_adapters/youtube.py",
+    "src/corpus_engine.py",
+    "tests/test_corpus_adapter_contract.py",
+    "tests/test_corpus_engine.py",
+    "tests/test_github_adapter.py",
+    "tests/test_web_adapter.py",
+    "tests/test_youtube_adapter.py"
+  ],
+  "tdd": {
+    "red_no_delta_timestamp": "python3 -m unittest tests/test_web_adapter.py -v => cursor conflict for identical bytes fetched at a later time",
+    "red_current_cursor_identity": "python3 -m unittest tests/test_web_adapter.py -v => batch ids differed when cursor_before advanced to the current cursor",
+    "red_live_feed": "live IndyDevDan adapter probe => YouTube Atom feed returned HTTP 404",
+    "red_fallback_contract": "python3 -m unittest tests/test_youtube_adapter.py -v => inventory_fetch argument missing",
+    "red_fallback_no_delta": "python3 -m unittest tests/test_youtube_adapter.py -v => transport-only JSON metadata created a second batch",
+    "red_cross_transport_revision": "python3 -m unittest tests/test_youtube_adapter.py -v => Atom and yt-dlp representations produced different inventory revisions",
+    "focused_green": "python3 -m unittest tests/test_youtube_adapter.py tests/test_web_adapter.py tests/test_github_adapter.py tests/test_corpus_adapter_contract.py tests/test_corpus_engine.py -v => 26 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 114 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --cached --check => passed"
+  },
+  "copied_live_probe": {
+    "source": "/root/corpora/agentic-engineering/sources/practitioner/indydevdan-youtube-*.md",
+    "card_count": 205,
+    "manifest_sha256_before": "6c991d13e3bc9df66712026686c542c5fb09315ebcaa3bbd124f441c1a19b5d6",
+    "manifest_sha256_after": "6c991d13e3bc9df66712026686c542c5fb09315ebcaa3bbd124f441c1a19b5d6",
+    "projection_changed": false,
+    "live_atom_status": 404,
+    "fallback": "bounded yt-dlp flat public inventory",
+    "legacy_inventory_revision": "fb251a3e48a4cc09ca6456b2c761ca7b192e2a6ffdfff94411856336beca0a29",
+    "current_inventory_revision": "fb251a3e48a4cc09ca6456b2c761ca7b192e2a6ffdfff94411856336beca0a29",
+    "adapter_batch_count_after_two_fetches": 1,
+    "adapter_state_byte_stable": true,
+    "raw_fallback_suffix": ".json"
+  },
+  "acceptance": {
+    "raw_and_normalized_hashes_separate": true,
+    "github_moving_ref_resolved_to_immutable_commit": true,
+    "youtube_metadata_before_transcription": true,
+    "vtt_rollups_deduplicated": true,
+    "page_summary_rejected_as_transcript": true,
+    "copied_live_205_projection_stable_without_revision": true,
+    "no_delta_batches_bounded": true,
+    "registry_promotion": false
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_callers/code_blast returned not_built/not_found for AdapterRunner.run, ObservationBatch.create, YouTubeFeedAdapter.fetch and parse_feed.",
+    "repository_search": "AdapterRunner.run is called by CorpusEngine.run_adapter and adapter tests; ObservationBatch.create is called only by AdapterRunner.run; parse_feed is used by the YouTube adapter and CorpusEngine legacy-revision migration."
+  },
+  "external_acquisition": {
+    "deep_public_source_packages_today_this_slice": 1,
+    "source": "IndyDevDan public YouTube channel inventory",
+    "rights_state": "public_metadata_only",
+    "llm_calls": 0,
+    "estimated_model_cost_usd": 0.0
+  },
+  "production_effect": "None. The live corpus was read and copied only; no live corpus page, GBrain source, scheduler, Expert/Percival behavior, credential, config or external system was mutated.",
+  "next_action": "Add the Agentic Engineering scientific and production evidence adapters (arXiv, OpenAlex, benchmark, RSS and postmortem) with fixture-first provenance and evidence-classification tests, then commit the next green slice."
+}
