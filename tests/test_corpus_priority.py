@@ -260,6 +260,16 @@ class CorpusPriorityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "inconsistent stored cycle plan"):
                 ledger.usage_for_day(NOW)
 
+    def test_budget_ledger_rejects_preplanted_dangling_state_symlink(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "budget.json"
+            target = Path(td) / "missing-target.json"
+            path.symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "may not be a symlink"):
+                BudgetLedger(path)
+            self.assertTrue(path.is_symlink())
+            self.assertFalse(target.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

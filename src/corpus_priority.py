@@ -634,10 +634,12 @@ class BudgetLedger:
         self.lock_path = self.path.with_suffix(self.path.suffix + ".lock")
         lock_fd = _open_private_regular(self.lock_path, os.O_CREAT | os.O_RDWR)
         os.close(lock_fd)
-        if self.path.exists() and self.path.is_symlink():
+        if self.path.is_symlink():
             raise ValueError(f"budget ledger path may not be a symlink: {self.path}")
 
     def _read_state(self) -> dict[str, Any]:
+        if self.path.is_symlink():
+            raise ValueError(f"budget ledger path may not be a symlink: {self.path}")
         if not self.path.exists():
             return {"schema_version": _BUDGET_SCHEMA_VERSION, "reservations": {}}
         descriptor = _open_private_regular(self.path, os.O_RDONLY)
@@ -665,7 +667,7 @@ class BudgetLedger:
         return document
 
     def _write_state(self, state: Mapping[str, Any]) -> None:
-        if self.path.exists() and self.path.is_symlink():
+        if self.path.is_symlink():
             raise ValueError(f"budget ledger path may not be a symlink: {self.path}")
         encoded = (
             json.dumps(state, sort_keys=True, separators=(",", ":"), allow_nan=False)
