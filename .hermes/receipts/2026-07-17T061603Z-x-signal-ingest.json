@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-x-signal-ingest-20260717T061603Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "bounded-x-signal-ingestion-complete",
+  "commit": "e335000be710ed266cdef1b4f6841f927aa37fe5",
+  "diff_sha256": "5fd39d4136ed25287e43f9c6ea2b5d5a923c83176a28ce10285459f850fbde05",
+  "recorded_at": "2026-07-17T06:16:03Z",
+  "summary": "Added deterministic bounded ingestion for Hermes-provided X radar results. It preserves exact author, timezone-bearing publication date, post URL and text; keeps external primary-source locators separate; converges duplicate posts and threads across retries and concurrent batches; fails closed on conflicting renderings; and stamps every projection, thread and post as unverified_discovery_signal and doctrine_eligible=false.",
+  "files": [
+    "src/corpus_x_signal_ingest.py",
+    "tests/test_corpus_x_signal_ingest.py"
+  ],
+  "tdd": {
+    "red": "python3 -m unittest tests/test_corpus_x_signal_ingest.py -v => import error because corpus_x_signal_ingest did not exist",
+    "focused_green": "python3 -m unittest tests/test_corpus_x_signal_ingest.py -v => 5 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 130 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --check => passed"
+  },
+  "acceptance": {
+    "exact_author_date_url_text_preserved": true,
+    "linked_primary_source_locators_preserved_separately": true,
+    "duplicate_posts_and_threads_converge": true,
+    "concurrent_batches_do_not_lose_thread_members": true,
+    "conflicting_duplicate_url_fails_closed_without_mutation": true,
+    "evidence_class": "unverified_discovery_signal",
+    "doctrine_eligible": false,
+    "x_links_cannot_masquerade_as_primary_sources": true,
+    "bounded_max_items": 100
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_blast returned not_found and code_callers/code_refs returned not_built for the new ingest_x_signals symbol.",
+    "repository_search": "The new module is referenced only by its new test module. No existing function was edited."
+  },
+  "external_acquisition": {
+    "deep_public_source_packages_today_this_slice": 0,
+    "fixtures_only": true,
+    "llm_calls": 0,
+    "estimated_model_cost_usd": 0.0
+  },
+  "production_effect": "None. No X search was run, no live corpus/raw archive/GBrain page was written, and no scheduler, Expert/Percival behavior, credential, config or external system was mutated.",
+  "next_action": "Implement deterministic budgeted ranking and promotion policy with rights fail-closed behavior, no-material-delta LLM suppression, daily caps, retry/backoff and starvation control."
+}

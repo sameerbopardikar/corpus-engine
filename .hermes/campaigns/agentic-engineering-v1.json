@@ -8,7 +8,7 @@
   "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
   "status": "executing",
   "terminal_semantics": "turn_finished_work_incomplete_durable_next_action",
-  "current_phase": "bounded-x-signal-ingestion",
+  "current_phase": "budgeted-ranking-and-promotion-policy",
   "authority": "single-writer controller in the named worktree",
   "production_boundary": "No Expert/Percival production mutation. Reversible backed-up deployment to the existing corpus-engine-cycle is allowed after current-byte tests and live shadow verification.",
   "completion_test": "A real unattended cycle discovers or selects a public rights-clear evidence candidate, acquires and preserves it, writes a GBrain corpus source artifact, emits a versioned doctrine decision, passes deterministic integrity/retrieval/lineage evaluations, records a receipt and selects the next gap; tests, source-scoped retrieval, dashboard readback, scheduler and rollback are verified.",
@@ -17,23 +17,24 @@
     "strict seed loader and personal V0 ranker",
     "shared immutable adapter contract with atomic observation/cursor commit",
     "web, GitHub and YouTube adapters with live 205-card no-delta proof and bounded YouTube fallback",
-    "arXiv, OpenAlex, benchmark, RSS and production-report adapters with explicit reported-claim and evidence-class boundaries"
+    "arXiv, OpenAlex, benchmark, RSS and production-report adapters with explicit reported-claim and evidence-class boundaries",
+    "bounded X discovery-signal ingestion with exact post preservation, duplicate-thread convergence and hard doctrine ineligibility"
   ],
-  "next_action": "Add bounded X discovery-signal ingestion with failing tests for exact author/date/URL/text and linked primary-source preservation, duplicate-thread convergence, unverified_discovery_signal classification and doctrine ineligibility; then run focused and full discovery.",
+  "next_action": "Add failing adversarial tests for deterministic ranking under reordered input, rights-unclear/private auto-ineligibility, zero LLM work on no-material-delta, explicit daily item/token/cost caps, retry/backoff and starvation control; then implement the policy and run focused/full verification.",
   "last_verified": {
-    "commit": "5b2c9d9bac8267742930c1c26057f38eafb38b82",
-    "diff_sha256": "dfb0be03d458e0259e78dd113cb1dfab43ae6ac9d74e1102ad8eb75213264efe",
-    "focused_tests": "python3 -m unittest tests/test_arxiv_adapter.py tests/test_openalex_adapter.py tests/test_benchmark_adapter.py tests/test_rss_adapter.py tests/test_postmortem_adapter.py tests/test_corpus_adapter_contract.py tests/test_web_adapter.py tests/test_github_adapter.py tests/test_youtube_adapter.py -v => 30 passed",
-    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 125 passed",
-    "static": "python3 -m compileall -q src tests && git diff --check && git diff --cached --check => passed",
-    "receipt": ".hermes/receipts/2026-07-17T061048Z-scientific-production-adapters.json"
+    "commit": "e335000be710ed266cdef1b4f6841f927aa37fe5",
+    "diff_sha256": "5fd39d4136ed25287e43f9c6ea2b5d5a923c83176a28ce10285459f850fbde05",
+    "focused_tests": "python3 -m unittest tests/test_corpus_x_signal_ingest.py -v => 5 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 130 passed",
+    "static": "python3 -m compileall -q src tests && git diff --check => passed",
+    "receipt": ".hermes/receipts/2026-07-17T061603Z-x-signal-ingest.json"
   },
-  "manager_update_key": "scientific-production-adapters-complete",
+  "manager_update_key": "x-signal-ingestion-complete",
   "manager_update": {
-    "delivered": true,
-    "delivery_id": "mgr_7160593c0dfd495e",
-    "slack_ts": "1784268717.326579",
-    "delivered_at": "2026-07-17T06:12:10Z"
+    "delivered": false,
+    "prior_delivery_id": "mgr_7160593c0dfd495e",
+    "prior_slack_ts": "1784268717.326579",
+    "pending_since": "2026-07-17T06:16:03Z"
   },
-  "updated_at": "2026-07-17T06:12:10Z"
+  "updated_at": "2026-07-17T06:16:03Z"
 }
