@@ -33,5 +33,10 @@
     "repository_search": "_verify_raw has one direct caller, AdapterRunner.run, in src/corpus_adapters/base.py; no pre-existing modules were modified."
   },
   "production_effect": "None. No live corpus, GBrain source, scheduler, Expert/Percival behavior, credentials or external system was changed.",
+  "manager_update": {
+    "update_key": "shared-adapter-contract-complete",
+    "delivery_id": "mgr_ada98cb05a4e47e6",
+    "delivered": true
+  },
   "next_action": "Port the existing web/GitHub/YouTube refresh behavior behind the shared contract with adversarial regression tests, then prove the copied-live IndyDevDan projection remains unchanged absent a real revision."
 }

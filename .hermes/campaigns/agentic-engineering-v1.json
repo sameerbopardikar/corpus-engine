@@ -25,6 +25,11 @@
     "static": "python3 -m compileall -q src tests && git diff --check => passed",
     "receipt": ".hermes/receipts/2026-07-17T052809Z-shared-adapter-contract.json"
   },
-  "manager_update_key": "kickoff-finish-line",
-  "updated_at": "2026-07-17T05:28:09Z"
+  "manager_update_key": "shared-adapter-contract-complete",
+  "manager_update": {
+    "delivered": true,
+    "delivery_id": "mgr_ada98cb05a4e47e6",
+    "delivered_at": "2026-07-17T05:29:03Z"
+  },
+  "updated_at": "2026-07-17T05:29:11Z"
 }
