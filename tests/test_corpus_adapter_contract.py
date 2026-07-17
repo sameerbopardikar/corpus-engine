@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -61,6 +61,9 @@ class FixtureAdapter(SourceAdapter):
                 evidence_pointer=payload.final_url,
                 raw_pointer=payload.raw_pointer,
                 raw_sha256=hashlib.sha256(payload.body).hexdigest(),
+                normalized_pointer=payload.raw_pointer,
+                normalized_sha256=hashlib.sha256(payload.body).hexdigest(),
+                content_kind="fixture_json",
                 fetched_at=payload.fetched_at,
                 source_revision=payload.source_revision,
                 rights_state=spec.rights_state,
@@ -163,6 +166,26 @@ class AdapterContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.kind, FailureKind.RAW_INTEGRITY)
         self.assertFalse(self.state_path.exists())
 
+    def test_normalized_pointer_hash_mismatch_fails_before_commit(self):
+        normalized_path = self.root / "normalized.txt"
+
+        class CorruptingNormalizedAdapter(FixtureAdapter):
+            def parse(inner_self, spec, request, payload):
+                observations, cursor = super().parse(spec, request, payload)
+                normalized_path.write_bytes(b"normalized-good")
+                observation = replace(
+                    observations[0],
+                    normalized_pointer=str(normalized_path),
+                    normalized_sha256=hashlib.sha256(b"normalized-good").hexdigest(),
+                )
+                normalized_path.write_bytes(b"normalized-tampered")
+                return (observation,), cursor
+
+        with self.assertRaises(AdapterFailure) as caught:
+            AdapterRunner(self.state_path).run(CorruptingNormalizedAdapter(self.raw_path), self.spec, InventoryRequest(max_items=3))
+        self.assertEqual(caught.exception.kind, FailureKind.RAW_INTEGRITY)
+        self.assertFalse(self.state_path.exists())
+
     def test_parser_cannot_upgrade_source_rights_state(self):
         restricted_spec = SourceSpec(
             source_id="fixture-source",
@@ -184,6 +207,9 @@ class AdapterContractTests(unittest.TestCase):
                         evidence_pointer=observation.evidence_pointer,
                         raw_pointer=observation.raw_pointer,
                         raw_sha256=observation.raw_sha256,
+                        normalized_pointer=observation.normalized_pointer,
+                        normalized_sha256=observation.normalized_sha256,
+                        content_kind=observation.content_kind,
                         fetched_at=observation.fetched_at,
                         source_revision=observation.source_revision,
                         rights_state=RightsState.PUBLIC_RIGHTS_CLEAR,

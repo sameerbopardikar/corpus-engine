@@ -116,6 +116,9 @@ class NormalizedObservation:
     evidence_pointer: str
     raw_pointer: str
     raw_sha256: str
+    normalized_pointer: str
+    normalized_sha256: str
+    content_kind: str
     fetched_at: str
     source_revision: str
     rights_state: RightsState
@@ -126,6 +129,9 @@ class NormalizedObservation:
         _require_http_url("evidence_pointer", self.evidence_pointer)
         _require_text("raw_pointer", self.raw_pointer)
         _require_sha256("raw_sha256", self.raw_sha256)
+        _require_text("normalized_pointer", self.normalized_pointer)
+        _require_sha256("normalized_sha256", self.normalized_sha256)
+        _require_text("content_kind", self.content_kind)
         _require_aware_iso("fetched_at", self.fetched_at)
         _require_text("source_revision", self.source_revision)
         if not isinstance(self.rights_state, RightsState):
@@ -177,14 +183,24 @@ class ObservationBatch:
         payload: TransportPayload,
         observations: tuple[NormalizedObservation, ...],
     ) -> "ObservationBatch":
+        semantic_observations = []
+        for item in observations:
+            value = item.to_dict()
+            # Retrieval time and local preservation paths are provenance, not
+            # source identity. Identical source bytes/revisions must converge
+            # even when fetched in a later run or staged under another root.
+            for volatile_key in ("fetched_at", "raw_pointer", "raw_sha256", "normalized_pointer"):
+                value.pop(volatile_key)
+            semantic_observations.append(value)
         identity = {
             "source_id": source_id,
-            "cursor_before": cursor_before,
+            # cursor_before is a commit precondition, not material source
+            # identity. Omitting it lets a later no-delta check converge on the
+            # original batch while _commit still fences real cursor conflicts.
             "cursor_after": cursor_after,
             "transport_url": payload.final_url,
-            "transport_sha256": payload.raw_sha256,
             "source_revision": payload.source_revision,
-            "observations": [item.to_dict() for item in observations],
+            "observations": semantic_observations,
         }
         encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
         return cls(

@@ -16,16 +16,25 @@ import os
 import re
 import subprocess
 import sys
-import time
-import xml.etree.ElementTree as ET
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+
 
 import requests
+
+_SRC_ROOT = Path(__file__).resolve().parent
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
+
+from corpus_adapters.base import AdapterRunner, SourceAdapter
+from corpus_adapters.github import GitHubRepositoryAdapter
+from corpus_adapters.types import InventoryRequest, RightsState, SourceSpec
+from corpus_adapters.web import WebDocumentAdapter
+from corpus_adapters.youtube import YouTubeFeedAdapter, inventory_revision, normalize_caption_vtt, parse_feed
 
 CORPUS_REPO = Path(os.environ.get("CORPUS_REPO", "/root/corpora"))
 ARCHIVE_ROOT = Path(os.environ.get("CORPUS_ARCHIVE_ROOT", "/root/exports/thinker-corpora"))
@@ -138,22 +147,17 @@ def is_due(entry: dict[str, Any], prior: dict[str, Any], force: bool) -> bool:
 
 
 def has_material_refresh_results(results: list["RefreshResult"]) -> bool:
-    """True when a run checked or changed at least one due source."""
+    """True only when a due source changed a corpus projection."""
+    return any(result.status not in {"not_due", "unchanged"} for result in results)
+
+
+def has_checked_refresh_results(results: list["RefreshResult"]) -> bool:
+    """True when a run checked at least one due source, including no-delta checks."""
     return any(result.status != "not_due" for result in results)
 
 
 def vtt_to_text(raw: str) -> str:
-    lines: list[str] = []
-    seen = ""
-    for line in raw.replace("\r", "").splitlines():
-        line = re.sub(r"<[^>]+>", "", line).strip()
-        if not line or line.startswith("WEBVTT") or "-->" in line or line.isdigit() or line.startswith(("Kind:", "Language:")):
-            continue
-        line = html.unescape(line)
-        if line != seen:
-            lines.append(line)
-            seen = line
-    return "\n".join(lines).strip() + "\n"
+    return normalize_caption_vtt(raw)
 
 
 @dataclass
@@ -184,6 +188,37 @@ class CorpusEngine:
 
     def source_dir(self, source_id: str) -> Path:
         return self.archive_root / "raw" / slugify(source_id)
+
+    @property
+    def adapter_state_path(self) -> Path:
+        return self.archive_root / "adapter-state.json"
+
+    def adapter_cursor(self, source_id: str) -> str | None:
+        if not self.adapter_state_path.exists():
+            return None
+        state = load_json(self.adapter_state_path)
+        source = state.get("sources", {}).get(source_id, {})
+        cursor = source.get("cursor")
+        return cursor if isinstance(cursor, str) and cursor else None
+
+    def source_spec(self, entry: dict[str, Any], *, family: str, locator: str) -> SourceSpec:
+        rights_name = entry.get("rights_state", RightsState.PUBLIC_METADATA_ONLY.value)
+        return SourceSpec(
+            source_id=entry["id"],
+            domain=self.domain,
+            source_family=family,
+            canonical_locator=locator,
+            evidence_lane=entry.get("evidence_lane", "uncategorized"),
+            rights_state=RightsState(rights_name),
+        )
+
+    def run_adapter(self, entry: dict[str, Any], adapter: SourceAdapter, spec: SourceSpec, *, max_items: int):
+        request_value = InventoryRequest(
+            max_items=max_items,
+            cursor=self.adapter_cursor(entry["id"]),
+            timeout_seconds=float(entry.get("timeout_seconds", 45)),
+        )
+        return AdapterRunner(self.adapter_state_path).run(adapter, spec, request_value)
 
     def card_path(self, entry: dict[str, Any], suffix: str | None = None) -> Path:
         lane = slugify(entry.get("evidence_lane", "uncategorized"))
@@ -237,62 +272,69 @@ class CorpusEngine:
         path.write_text("\n".join(fm), encoding="utf-8")
         return str(path.relative_to(CORPUS_REPO).with_suffix(""))
 
-    def refresh_web(self, entry: dict[str, Any]) -> RefreshResult:
-        response = request(entry["url"])
-        payload = response.content
-        digest = sha256_bytes(payload)
-        raw_dir = self.source_dir(entry["id"])
-        raw_dir.mkdir(parents=True, exist_ok=True)
-        ext = ".md" if "markdown" in response.headers.get("content-type", "") or response.url.endswith(".md") else ".html"
-        raw_path = raw_dir / f"snapshot-{digest[:12]}{ext}"
-        raw_path.write_bytes(payload)
-        if ext == ".md":
-            text = payload.decode("utf-8", errors="replace")
-            title = entry.get("title", entry["id"])
-        else:
-            parser = MainTextParser()
-            parser.feed(payload.decode(response.encoding or "utf-8", errors="replace"))
-            text = parser.text()
-            title = entry.get("title") or parser.title or entry["id"]
-        if len(text) < entry.get("minimum_text_chars", 500):
+    def refresh_web(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
+        locator = entry["url"]
+        adapter = WebDocumentAdapter(self.source_dir(entry["id"]), http_get=request, fetched_at=iso)
+        spec = self.source_spec(entry, family="web", locator=locator)
+        batch = self.run_adapter(entry, adapter, spec, max_items=1)
+        observation = batch.observations[0]
+        if prior and prior.get("content_hash") == batch.source_revision:
+            return RefreshResult(entry["id"], "unchanged", list(prior.get("pages", [])), "source revision unchanged", batch.source_revision, observation.canonical_locator)
+        text = Path(observation.normalized_pointer).read_text(encoding="utf-8")
+        if len(text) < entry.get("minimum_text_chars", 1):
             raise RuntimeError(f"normalized text too short: {len(text)} chars")
-        normalized_path = raw_dir / f"normalized-{digest[:12]}.txt"
-        normalized_path.write_text(text, encoding="utf-8")
         excerpt_chars = int(entry.get("card_excerpt_chars", 24000))
         body = (
             f"> **Epistemic boundary:** {entry.get('epistemic_note', 'This is attributed external evidence, not settled doctrine.')}\n\n"
-            f"Canonical source: <{response.url}>\n\n"
+            f"Canonical source: <{observation.canonical_locator}>\n\n"
             f"## Normalized source snapshot\n\n{text[:excerpt_chars]}"
         )
-        slug = self.write_card(entry, title, body, response.url, raw_path, digest)
-        return RefreshResult(entry["id"], "refreshed", [slug], f"{len(text)} normalized chars", digest, response.url)
+        slug = self.write_card(
+            entry,
+            entry.get("title", observation.title),
+            body,
+            observation.canonical_locator,
+            Path(observation.raw_pointer),
+            observation.raw_sha256,
+            extra={
+                "source_revision": batch.source_revision,
+                "normalized_storage_path": observation.normalized_pointer,
+                "normalized_sha256": observation.normalized_sha256,
+            },
+        )
+        return RefreshResult(entry["id"], "refreshed", [slug], f"{len(text)} normalized chars", batch.source_revision, observation.canonical_locator)
 
-    def refresh_github(self, entry: dict[str, Any]) -> RefreshResult:
+    def refresh_github(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
         repo = entry["repo"]
-        meta_response = request(f"https://api.github.com/repos/{repo}")
-        meta = meta_response.json()
-        branch = meta.get("default_branch", "main")
-        readme_response = request(f"https://api.github.com/repos/{repo}/readme")
-        readme_json = readme_response.json()
-        download_url = readme_json.get("download_url")
-        readme = request(download_url).text if download_url else ""
-        commits = request(f"https://api.github.com/repos/{repo}/commits?per_page=1").json()
-        head = commits[0].get("sha") if isinstance(commits, list) and commits else None
-        snapshot = {"repository": repo, "head": head, "metadata": meta, "readme": readme}
-        payload = (json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-        digest = sha256_bytes(payload)
-        raw_dir = self.source_dir(entry["id"])
-        raw_dir.mkdir(parents=True, exist_ok=True)
-        raw_path = raw_dir / f"snapshot-{digest[:12]}.json"
-        raw_path.write_bytes(payload)
+        locator = f"https://github.com/{repo}"
+        adapter = GitHubRepositoryAdapter(self.source_dir(entry["id"]), repository=repo, http_get=request, fetched_at=iso)
+        spec = self.source_spec(entry, family="github", locator=locator)
+        batch = self.run_adapter(entry, adapter, spec, max_items=1)
+        observation = batch.observations[0]
+        if prior and prior.get("content_hash") == batch.source_revision:
+            return RefreshResult(entry["id"], "unchanged", list(prior.get("pages", [])), f"head {batch.source_revision} unchanged", batch.source_revision, locator)
+        readme = Path(observation.normalized_pointer).read_text(encoding="utf-8", errors="replace")
         body = (
-            f"> **Epistemic boundary:** Repository source and maintainer documentation. Runtime behavior still requires code-path inspection and testing.\n\n"
-            f"Repository: <https://github.com/{repo}>\n\n"
-            f"Observed head: `{head or 'unknown'}` on `{branch}`.\n\n"
+            "> **Epistemic boundary:** Repository source and maintainer documentation. Runtime behavior still requires code-path inspection and testing.\n\n"
+            f"Repository: <{locator}>\n\n"
+            f"Observed immutable head: `{batch.source_revision}`.\n\n"
             f"## README snapshot\n\n{readme[:24000]}"
         )
-        slug = self.write_card(entry, entry.get("title", repo), body, f"https://github.com/{repo}", raw_path, digest, extra={"repository_head": head or "unknown"})
-        return RefreshResult(entry["id"], "refreshed", [slug], f"head {head}", digest, f"https://github.com/{repo}")
+        slug = self.write_card(
+            entry,
+            entry.get("title", repo),
+            body,
+            observation.canonical_locator,
+            Path(observation.raw_pointer),
+            observation.raw_sha256,
+            extra={
+                "repository_head": batch.source_revision,
+                "source_revision": batch.source_revision,
+                "normalized_storage_path": observation.normalized_pointer,
+                "normalized_sha256": observation.normalized_sha256,
+            },
+        )
+        return RefreshResult(entry["id"], "refreshed", [slug], f"head {batch.source_revision}", batch.source_revision, locator)
 
     def acquire_youtube_transcript(self, video_id: str, destination: Path) -> tuple[Path | None, str | None]:
         destination.mkdir(parents=True, exist_ok=True)
@@ -312,29 +354,44 @@ class CorpusEngine:
         clean_path.write_text(vtt_to_text(raw_path.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
         return clean_path, None
 
-    def refresh_youtube(self, entry: dict[str, Any]) -> RefreshResult:
+    def prior_youtube_revision(self, entry: dict[str, Any], prior: dict[str, Any] | None) -> str | None:
+        if not prior:
+            return None
+        prior_hash = prior.get("content_hash")
+        if not isinstance(prior_hash, str) or len(prior_hash) != 64:
+            return None
+        # New adapter state stores the inventory revision directly. Legacy state
+        # stored the rolling feed byte hash; recover its stable inventory once.
+        raw_dir = self.source_dir(entry["id"])
+        legacy_feed = raw_dir / f"feed-{prior_hash[:12]}.xml"
+        if legacy_feed.exists() and sha256_bytes(legacy_feed.read_bytes()) == prior_hash:
+            return inventory_revision(parse_feed(legacy_feed.read_bytes()))
+        return prior_hash
+
+    def refresh_youtube(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
         channel_id = entry["channel_id"]
         feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-        response = request(feed_url)
-        digest = sha256_bytes(response.content)
         raw_dir = self.source_dir(entry["id"])
-        raw_dir.mkdir(parents=True, exist_ok=True)
-        feed_path = raw_dir / f"feed-{digest[:12]}.xml"
-        feed_path.write_bytes(response.content)
-        ns = {"atom": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015", "media": "http://search.yahoo.com/mrss/"}
-        root = ET.fromstring(response.content)
-        items: list[dict[str, str]] = []
-        for node in root.findall("atom:entry", ns):
-            video_id = node.findtext("yt:videoId", default="", namespaces=ns)
-            title = node.findtext("atom:title", default=video_id, namespaces=ns)
-            published = node.findtext("atom:published", default="", namespaces=ns)
-            link_node = node.find("atom:link", ns)
-            url = link_node.attrib.get("href") if link_node is not None else f"https://www.youtube.com/watch?v={video_id}"
-            items.append({"video_id": video_id, "title": title, "published": published, "url": url})
+        adapter = YouTubeFeedAdapter(raw_dir, channel_id=channel_id, http_get=request, fetched_at=iso)
+        locator = f"https://www.youtube.com/channel/{channel_id}"
+        spec = self.source_spec(entry, family="youtube", locator=locator)
+        max_items = min(int(entry.get("max_items_per_refresh", 3)), 100)
+        batch = self.run_adapter(entry, adapter, spec, max_items=max_items)
+        prior_revision = self.prior_youtube_revision(entry, prior)
+        if prior_revision == batch.source_revision:
+            return RefreshResult(
+                entry["id"],
+                "unchanged",
+                list((prior or {}).get("pages", [])),
+                f"inventory revision unchanged; {len(batch.observations)} metadata items observed; transcription skipped",
+                batch.source_revision,
+                feed_url,
+            )
+
         pages: list[str] = []
         transcript_count = 0
-        max_items = int(entry.get("max_items_per_refresh", 3))
-        for item in items[:max_items]:
+        for observation in batch.observations:
+            item = json.loads(Path(observation.normalized_pointer).read_text(encoding="utf-8"))
             transcript_path: Path | None = None
             transcript_error: str | None = None
             if entry.get("acquire_transcripts", True):
@@ -342,7 +399,11 @@ class CorpusEngine:
             transcript = transcript_path.read_text(encoding="utf-8") if transcript_path else ""
             if transcript_path:
                 transcript_count += 1
-            item_digest = sha256_bytes(transcript.encode()) if transcript else None
+            raw_candidates = sorted((raw_dir / "transcripts").glob(f"{item['video_id']}*.vtt")) if transcript_path else []
+            raw_pointer = raw_candidates[0] if raw_candidates else Path(observation.raw_pointer)
+            raw_digest = sha256_bytes(raw_pointer.read_bytes())
+            normalized_digest = sha256_bytes(transcript.encode("utf-8")) if transcript else observation.normalized_sha256
+            normalized_pointer = str(transcript_path) if transcript_path else observation.normalized_pointer
             boundary = "Practitioner evidence. A demonstrated workflow is stronger than an unsupported claim, but neither becomes doctrine without comparison or local verification."
             body = (
                 f"> **Epistemic boundary:** {boundary}\n\n"
@@ -353,14 +414,43 @@ class CorpusEngine:
                 body += "\nCaption acquisition did not produce a transcript in this pass; the shared fallback ladder remains queued.\n"
             if transcript:
                 body += f"\n## Transcript\n\n{transcript[:60000]}"
-            pages.append(self.write_card(entry, item["title"], body, item["url"], transcript_path or feed_path, item_digest or digest, suffix=item["video_id"], extra={"video_id": item["video_id"], "published_at": item["published"], "transcript_status": "acquired" if transcript_path else "pending"}))
+            pages.append(
+                self.write_card(
+                    entry,
+                    item["title"],
+                    body,
+                    item["url"],
+                    raw_pointer,
+                    raw_digest,
+                    suffix=item["video_id"],
+                    extra={
+                        "video_id": item["video_id"],
+                        "published_at": item["published"],
+                        "transcript_status": "acquired" if transcript_path else "pending",
+                        "source_revision": batch.source_revision,
+                        "normalized_storage_path": normalized_pointer,
+                        "normalized_sha256": normalized_digest,
+                    },
+                )
+            )
         channel_body = (
-            f"> **Epistemic boundary:** Practitioner/operator lane. Source credibility is evaluated per topic and claim.\n\n"
+            "> **Epistemic boundary:** Practitioner/operator lane. Source credibility is evaluated per topic and claim.\n\n"
             f"Channel feed: <{feed_url}>\n\n"
-            f"Items observed this refresh: **{len(items)}**. Cards processed: **{min(len(items), max_items)}**. Transcripts acquired: **{transcript_count}**."
+            f"Items observed this refresh: **{len(batch.observations)}**. Transcripts acquired: **{transcript_count}**."
         )
-        pages.append(self.write_card(entry, entry.get("title", entry["id"]), channel_body, feed_url, feed_path, digest))
-        return RefreshResult(entry["id"], "refreshed", pages, f"{len(items)} feed items; {transcript_count} transcripts", digest, feed_url)
+        feed_path = Path(batch.observations[0].raw_pointer) if batch.observations else raw_dir / "missing-feed"
+        pages.append(
+            self.write_card(
+                entry,
+                entry.get("title", entry["id"]),
+                channel_body,
+                feed_url,
+                feed_path if feed_path.exists() else None,
+                sha256_bytes(feed_path.read_bytes()) if feed_path.exists() else None,
+                extra={"source_revision": batch.source_revision},
+            )
+        )
+        return RefreshResult(entry["id"], "refreshed", pages, f"{len(batch.observations)} metadata items; {transcript_count} transcripts", batch.source_revision, feed_url)
 
     def refresh_pointer(self, entry: dict[str, Any]) -> RefreshResult:
         body = (
@@ -373,14 +463,14 @@ class CorpusEngine:
         slug = self.write_card(entry, entry.get("title", entry["id"]), body, url, None, None)
         return RefreshResult(entry["id"], "registered", [slug], entry.get("status", "registered"), None, url)
 
-    def refresh_entry(self, entry: dict[str, Any]) -> RefreshResult:
+    def refresh_entry(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
         source_type = entry["source_type"]
         if source_type == "web_document":
-            return self.refresh_web(entry)
+            return self.refresh_web(entry, prior)
         if source_type == "github_repository":
-            return self.refresh_github(entry)
+            return self.refresh_github(entry, prior)
         if source_type == "youtube_channel":
-            return self.refresh_youtube(entry)
+            return self.refresh_youtube(entry, prior)
         if source_type in {"x_discovery", "private_community", "discovery_feed"}:
             return self.refresh_pointer(entry)
         raise RuntimeError(f"unsupported source_type: {source_type}")
@@ -397,18 +487,18 @@ class CorpusEngine:
                 results.append(RefreshResult(source_id, "not_due", [], "refresh window not reached"))
                 continue
             try:
-                result = self.refresh_entry(entry)
+                result = self.refresh_entry(entry, prior)
                 prior.update({"last_checked_at": iso(), "last_success_at": iso(), "last_status": result.status, "last_detail": result.detail, "last_error": None, "content_hash": result.content_hash, "canonical_url": result.canonical_url, "pages": result.pages})
             except Exception as exc:
                 result = RefreshResult(source_id, "failed", [], f"{type(exc).__name__}: {exc}")
                 prior.update({"last_checked_at": iso(), "last_status": "failed", "last_error": result.detail})
             results.append(result)
-        # A scheduler run before any refresh window opens is a read-only
-        # no-op. Avoid dirtying state/coverage timestamps and overwriting
-        # curated coverage detail on every routine cycle.
-        if has_material_refresh_results(results):
+        # Persist due-check timestamps even when source bytes are unchanged, but
+        # never rewrite corpus projections for a no-material-delta cycle.
+        if has_checked_refresh_results(results):
             self.state["updated_at"] = iso()
             write_json(self.state_path, self.state)
+        if has_material_refresh_results(results):
             self.write_coverage(results)
         return results
 

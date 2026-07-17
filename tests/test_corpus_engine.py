@@ -64,6 +64,12 @@ Hello
         self.assertFalse(corpus_engine.has_material_refresh_results(results))
         results.append(corpus_engine.RefreshResult("three", "refreshed", ["page"], "changed"))
         self.assertTrue(corpus_engine.has_material_refresh_results(results))
+        self.assertFalse(
+            corpus_engine.has_material_refresh_results(
+                [corpus_engine.RefreshResult("four", "unchanged", ["page"], "same revision")]
+            )
+        )
+
     def test_agentic_engineering_baseline_fixture_preserves_registry_shape(self):
         fixture_path = Path(__file__).parent / "fixtures" / "agentic_engineering_registry.json"
         registry = json.loads(fixture_path.read_text(encoding="utf-8"))

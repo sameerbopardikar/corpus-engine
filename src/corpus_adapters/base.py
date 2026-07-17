@@ -111,6 +111,12 @@ class AdapterRunner:
                 raise AdapterFailure(FailureKind.CONTRACT, "adapter cannot change the source rights state")
             if observation.raw_pointer != payload.raw_pointer or observation.raw_sha256 != payload.raw_sha256:
                 raise AdapterFailure(FailureKind.RAW_INTEGRITY, "observation raw provenance differs from transport receipt")
+            try:
+                normalized_bytes = Path(observation.normalized_pointer).read_bytes()
+            except OSError as exc:
+                raise AdapterFailure(FailureKind.RAW_INTEGRITY, f"normalized pointer unreadable: {exc}") from exc
+            if hashlib.sha256(normalized_bytes).hexdigest() != observation.normalized_sha256:
+                raise AdapterFailure(FailureKind.RAW_INTEGRITY, "normalized pointer hash mismatch")
             if observation.fetched_at != payload.fetched_at or observation.source_revision != payload.source_revision:
                 raise AdapterFailure(FailureKind.RAW_INTEGRITY, "observation transport metadata mismatch")
 
@@ -142,7 +148,17 @@ class AdapterRunner:
                 source_state = state["sources"].get(batch.source_id, {"cursor": None, "batches": []})
                 for prior in source_state.get("batches", []):
                     if prior.get("batch_id") == batch.batch_id:
-                        return ObservationBatch.from_dict(prior)
+                        # Accept either an exact replay of the original command
+                        # or a current-cursor no-delta check. A different stale
+                        # cursor must still fail closed rather than borrowing an
+                        # old batch's idempotency result.
+                        if batch.cursor_before in {prior.get("cursor_before"), source_state.get("cursor")}:
+                            return ObservationBatch.from_dict(prior)
+                        raise AdapterFailure(
+                            FailureKind.CURSOR_CONFLICT,
+                            f"cursor changed: expected {batch.cursor_before!r}, current {source_state.get('cursor')!r}",
+                            retryable=True,
+                        )
                 if source_state.get("cursor") != batch.cursor_before:
                     raise AdapterFailure(
                         FailureKind.CURSOR_CONFLICT,
