@@ -226,13 +226,22 @@ class CorpusPriorityTests(unittest.TestCase):
             task = CandidateTask(candidate("same"), estimated_cost_usd=0.25)
             first = ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
             before = path.read_bytes()
+            before_stat = path.stat()
             second = ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
             self.assertEqual(first.to_dict(), second.to_dict())
             self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(
+                (path.stat().st_ino, path.stat().st_mtime_ns, path.stat().st_size),
+                (before_stat.st_ino, before_stat.st_mtime_ns, before_stat.st_size),
+            )
             conflicting = CandidateTask(candidate("different"), estimated_cost_usd=0.25)
             with self.assertRaisesRegex(ValueError, "conflicting reservation_id"):
                 ledger.reserve_cycle("cycle-one", [conflicting], self.policy, now=NOW)
             self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(
+                (path.stat().st_ino, path.stat().st_mtime_ns, path.stat().st_size),
+                (before_stat.st_ino, before_stat.st_mtime_ns, before_stat.st_size),
+            )
 
     def test_budget_ledger_rejects_forged_accounting(self):
         with tempfile.TemporaryDirectory() as td:
