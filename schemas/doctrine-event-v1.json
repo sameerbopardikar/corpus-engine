@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://expert.local/schemas/doctrine-event-v1.json",
+  "title": "Corpus Doctrine Event V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "event_id",
+    "command_id",
+    "command_digest",
+    "event_type",
+    "recorded_at",
+    "previous_digest",
+    "payload",
+    "event_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event_id": {"type": "string", "pattern": "^doctrine_evt_[0-9a-f]{24}$"},
+    "command_id": {"type": "string", "minLength": 1},
+    "command_digest": {"$ref": "#/$defs/sha256"},
+    "event_type": {
+      "enum": ["propose", "add_alias", "merge", "split", "revise", "bound", "supersede", "deprecate", "reject", "restore"]
+    },
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "previous_digest": {"$ref": "#/$defs/sha256"},
+    "payload": {"type": "object"},
+    "event_digest": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "page_slug", "locator", "claim_sha256", "evidence_class"],
+      "properties": {
+        "source_id": {"const": "corpora"},
+        "page_slug": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "claim_sha256": {"$ref": "#/$defs/sha256"},
+        "evidence_class": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
