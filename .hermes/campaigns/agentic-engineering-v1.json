@@ -31,10 +31,10 @@
   },
   "manager_update_key": "x-signal-ingestion-complete",
   "manager_update": {
-    "delivered": false,
-    "prior_delivery_id": "mgr_7160593c0dfd495e",
-    "prior_slack_ts": "1784268717.326579",
-    "pending_since": "2026-07-17T06:16:03Z"
+    "delivered": true,
+    "delivery_id": "mgr_e710f1babd0e4c33",
+    "slack_ts": "1784269056.596829",
+    "delivered_at": "2026-07-17T06:17:58Z"
   },
-  "updated_at": "2026-07-17T06:16:03Z"
+  "updated_at": "2026-07-17T06:17:58Z"
 }
