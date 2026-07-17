@@ -2,17 +2,23 @@
 """Deterministic, rights-aware priority and budget policy for corpus work."""
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import json
 import math
+import os
+import stat
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
-from corpus_engine_models import CandidateRecord
+from corpus_engine_models import CandidateRecord, SCORE_COMPONENTS
 
 _SCHEMA_VERSION = 1
+_BUDGET_SCHEMA_VERSION = 1
 _ALLOWED_RIGHTS = {
     "public_rights_clear",
     "public_metadata_only",
@@ -23,6 +29,36 @@ _ALLOWED_RIGHTS = {
 _AUTO_ACQUIRE_RIGHTS = {"public_rights_clear"}
 _METADATA_RIGHTS = {"public_metadata_only"}
 _PRIVATE_RIGHTS = {"private_authorized"}
+_POLICY_EVIDENCE_LANES = {
+    "scientific-evaluation",
+    "security-evaluation",
+    "production-reliability",
+    "production-architecture",
+    "implementation-research",
+    "practitioner-implementation",
+    "unverified-discovery-signal",
+    "default",
+}
+_POLICY_SCORE_KEYS = set(SCORE_COMPONENTS) - {"cost"}
+
+
+def _strict_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _load_strict_json(text: str) -> Any:
+    return json.loads(
+        text,
+        object_pairs_hook=_strict_json_pairs,
+        parse_constant=lambda value: (_ for _ in ()).throw(
+            ValueError(f"non-finite JSON constant: {value}")
+        ),
+    )
 
 
 def _finite_number(value: Any, name: str, *, minimum: float = 0.0) -> float:
@@ -97,6 +133,18 @@ class PriorityPolicy:
             raise ValueError(f"unsupported schema_version: {self.schema_version!r}")
         object.__setattr__(self, "evidence_lane_weights", _strict_mapping(dict(self.evidence_lane_weights), "evidence_lane_weights"))
         object.__setattr__(self, "score_weights", _strict_mapping(dict(self.score_weights), "score_weights"))
+        unknown_lanes = set(self.evidence_lane_weights) - _POLICY_EVIDENCE_LANES
+        missing_lanes = _POLICY_EVIDENCE_LANES - set(self.evidence_lane_weights)
+        if unknown_lanes:
+            raise ValueError(f"unknown evidence_lane_weights: {sorted(unknown_lanes)}")
+        if missing_lanes:
+            raise ValueError(f"missing evidence_lane_weights: {sorted(missing_lanes)}")
+        unknown_scores = set(self.score_weights) - _POLICY_SCORE_KEYS
+        missing_scores = _POLICY_SCORE_KEYS - set(self.score_weights)
+        if unknown_scores:
+            raise ValueError(f"unknown score_weights: {sorted(unknown_scores)}")
+        if missing_scores:
+            raise ValueError(f"missing score_weights: {sorted(missing_scores)}")
         if "default" not in self.evidence_lane_weights:
             raise ValueError("evidence_lane_weights must include default")
         if self.evidence_lane_weights["default"] <= 0:
@@ -188,7 +236,7 @@ class PriorityPolicy:
 
     @classmethod
     def from_file(cls, path: Path) -> "PriorityPolicy":
-        document = json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda value: (_ for _ in ()).throw(ValueError(f"non-finite JSON constant: {value}")))
+        document = _load_strict_json(path.read_text(encoding="utf-8"))
         if not isinstance(document, dict):
             raise ValueError("policy must be a JSON object")
         expected = set(cls.default().to_dict())
@@ -283,6 +331,21 @@ class PriorityDecision:
             "reason_codes": list(self.reason_codes),
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PriorityDecision":
+        expected = {
+            "candidate_id", "canonical_url", "action", "evidence_score",
+            "priority_score", "starvation_boost", "scheduled",
+            "auto_acquire_eligible", "auto_promote", "suggested_disposition",
+            "requires_llm", "estimated_llm_tokens", "estimated_cost_usd",
+            "retry_after", "reason_codes",
+        }
+        if set(data) != expected or not isinstance(data.get("reason_codes"), list):
+            raise ValueError("invalid stored priority decision")
+        values = dict(data)
+        values["reason_codes"] = tuple(values["reason_codes"])
+        return cls(**values)
+
 
 @dataclass(frozen=True)
 class CyclePlan:
@@ -302,6 +365,31 @@ class CyclePlan:
             "llm_tokens_scheduled": self.llm_tokens_scheduled,
             "estimated_cost_usd": self.estimated_cost_usd,
         }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CyclePlan":
+        expected = {
+            "decisions", "selected_candidate_ids", "deep_acquisitions_scheduled",
+            "llm_tasks_scheduled", "llm_tokens_scheduled", "estimated_cost_usd",
+        }
+        if set(data) != expected or not isinstance(data.get("decisions"), list):
+            raise ValueError("invalid stored cycle plan")
+        decisions = tuple(PriorityDecision.from_dict(item) for item in data["decisions"])
+        selected_ids = data.get("selected_candidate_ids")
+        if not isinstance(selected_ids, list):
+            raise ValueError("invalid stored selected_candidate_ids")
+        by_id = {item.candidate_id: item for item in decisions}
+        if len(by_id) != len(decisions) or any(item not in by_id for item in selected_ids):
+            raise ValueError("stored cycle plan has invalid candidate identities")
+        selected = tuple(by_id[item] for item in selected_ids)
+        return cls(
+            decisions=decisions,
+            selected=selected,
+            deep_acquisitions_scheduled=data["deep_acquisitions_scheduled"],
+            llm_tasks_scheduled=data["llm_tasks_scheduled"],
+            llm_tokens_scheduled=data["llm_tokens_scheduled"],
+            estimated_cost_usd=data["estimated_cost_usd"],
+        )
 
 
 def _score(task: CandidateTask, policy: PriorityPolicy, now: datetime) -> tuple[float, float, float]:
@@ -340,6 +428,11 @@ def _retry_after(task: CandidateTask, policy: PriorityPolicy) -> datetime | None
     return _parse_iso(task.last_attempted_at, "last_attempted_at") + timedelta(seconds=delay)
 
 
+def _retry_ready(task: CandidateTask, policy: PriorityPolicy, now: datetime) -> bool:
+    retry_at = _retry_after(task, policy)
+    return retry_at is None or now >= retry_at
+
+
 def plan_cycle(
     tasks: Iterable[CandidateTask],
     policy: PriorityPolicy,
@@ -357,7 +450,29 @@ def plan_cycle(
         seen.add(candidate_id)
         priority_score, evidence_score, starvation = _score(task, policy, current)
         ranked.append((priority_score, evidence_score, starvation, task))
-    ranked.sort(key=lambda row: (-row[0], row[3].candidate.candidate_id))
+    forced_candidates = [
+        row for row in ranked
+        if row[2] >= policy.starvation_max_boost
+        and row[3].material_delta
+        and row[3].candidate.rights_state in (_AUTO_ACQUIRE_RIGHTS | _METADATA_RIGHTS)
+        and _retry_ready(row[3], policy, current)
+    ]
+    forced_id = None
+    if forced_candidates:
+        forced_id = min(
+            forced_candidates,
+            key=lambda row: (
+                _parse_iso(row[3].candidate.first_seen_at, "first_seen_at"),
+                row[3].candidate.candidate_id,
+            ),
+        )[3].candidate.candidate_id
+    ranked.sort(
+        key=lambda row: (
+            0 if row[3].candidate.candidate_id == forced_id else 1,
+            -row[0],
+            row[3].candidate.candidate_id,
+        )
+    )
 
     decisions: list[PriorityDecision] = []
     selected_count = 0
@@ -403,6 +518,8 @@ def plan_cycle(
             reasons.append("daily_cost_cap")
 
         scheduled = not reasons
+        if scheduled and record.candidate_id == forced_id:
+            reasons.append("reserved_aging_slot")
         disposition = _disposition(evidence_score, policy)
         auto_promote = bool(
             scheduled
@@ -448,3 +565,180 @@ def plan_cycle(
         llm_tokens_scheduled=token_count,
         estimated_cost_usd=round(cost_total, 8),
     )
+
+
+def _task_payload(task: CandidateTask) -> dict[str, Any]:
+    return {
+        "candidate": task.candidate.to_dict(),
+        "material_delta": task.material_delta,
+        "requires_llm": task.requires_llm,
+        "estimated_llm_tokens": task.estimated_llm_tokens,
+        "estimated_cost_usd": task.estimated_cost_usd,
+        "failure_count": task.failure_count,
+        "last_attempted_at": task.last_attempted_at,
+    }
+
+
+def _open_private_regular(path: Path, flags: int) -> int:
+    descriptor = os.open(
+        path,
+        flags | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError(f"path is not a regular file: {path}")
+        os.fchmod(descriptor, 0o600)
+        return descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+class BudgetLedger:
+    """Atomic daily reservation authority for bounded corpus work."""
+
+    def __init__(self, path: Path | str):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        lock_fd = _open_private_regular(self.lock_path, os.O_CREAT | os.O_RDWR)
+        os.close(lock_fd)
+        if self.path.exists() and self.path.is_symlink():
+            raise ValueError(f"budget ledger path may not be a symlink: {self.path}")
+
+    def _read_state(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {"schema_version": _BUDGET_SCHEMA_VERSION, "reservations": {}}
+        descriptor = _open_private_regular(self.path, os.O_RDONLY)
+        with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+            document = _load_strict_json(handle.read())
+        if (
+            not isinstance(document, dict)
+            or set(document) != {"schema_version", "reservations"}
+            or document.get("schema_version") != _BUDGET_SCHEMA_VERSION
+            or not isinstance(document.get("reservations"), dict)
+        ):
+            raise ValueError("invalid budget ledger state")
+        for reservation_id, reservation in document["reservations"].items():
+            if (
+                not isinstance(reservation_id, str)
+                or not reservation_id.strip()
+                or not isinstance(reservation, dict)
+                or set(reservation) != {"request_sha256", "utc_day", "plan"}
+                or not isinstance(reservation["request_sha256"], str)
+                or not isinstance(reservation["utc_day"], str)
+                or not isinstance(reservation["plan"], dict)
+            ):
+                raise ValueError("invalid budget reservation")
+            CyclePlan.from_dict(reservation["plan"])
+        return document
+
+    def _write_state(self, state: Mapping[str, Any]) -> None:
+        if self.path.exists() and self.path.is_symlink():
+            raise ValueError(f"budget ledger path may not be a symlink: {self.path}")
+        encoded = (
+            json.dumps(state, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            + "\n"
+        ).encode("utf-8")
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", dir=self.path.parent
+        )
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.path)
+            directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+            readback_fd = _open_private_regular(self.path, os.O_RDONLY)
+            with os.fdopen(readback_fd, "rb") as handle:
+                if handle.read() != encoded:
+                    raise OSError("budget ledger readback mismatch")
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    @staticmethod
+    def _usage(state: Mapping[str, Any], utc_day: str) -> UsageSnapshot:
+        deep = llm_tasks = llm_tokens = 0
+        cost = 0.0
+        for reservation in state["reservations"].values():
+            if reservation["utc_day"] != utc_day:
+                continue
+            plan = CyclePlan.from_dict(reservation["plan"])
+            deep += plan.deep_acquisitions_scheduled
+            llm_tasks += plan.llm_tasks_scheduled
+            llm_tokens += plan.llm_tokens_scheduled
+            cost += plan.estimated_cost_usd
+        return UsageSnapshot(
+            deep_acquisitions=deep,
+            llm_tasks=llm_tasks,
+            llm_tokens=llm_tokens,
+            estimated_cost_usd=round(cost, 8),
+        )
+
+    def usage_for_day(self, day: datetime) -> UsageSnapshot:
+        current = _aware(day)
+        lock_fd = _open_private_regular(self.lock_path, os.O_RDWR)
+        with os.fdopen(lock_fd, "r+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
+            try:
+                return self._usage(self._read_state(), current.date().isoformat())
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+    def reserve_cycle(
+        self,
+        reservation_id: str,
+        tasks: Iterable[CandidateTask],
+        policy: PriorityPolicy,
+        *,
+        now: datetime,
+    ) -> CyclePlan:
+        if not isinstance(reservation_id, str) or not reservation_id.strip():
+            raise ValueError("reservation_id must be a non-blank string")
+        current = _aware(now)
+        task_list = tuple(tasks)
+        request = {
+            "reservation_id": reservation_id,
+            "now": _iso_seconds(current),
+            "policy": policy.to_dict(),
+            "tasks": sorted(
+                (_task_payload(task) for task in task_list),
+                key=lambda item: item["candidate"]["candidate_id"],
+            ),
+        }
+        request_bytes = json.dumps(
+            request, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        request_sha256 = hashlib.sha256(request_bytes).hexdigest()
+        lock_fd = _open_private_regular(self.lock_path, os.O_RDWR)
+        with os.fdopen(lock_fd, "r+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                state = self._read_state()
+                prior = state["reservations"].get(reservation_id)
+                if prior is not None:
+                    if prior["request_sha256"] != request_sha256:
+                        raise ValueError(
+                            f"conflicting reservation_id reuse: {reservation_id}"
+                        )
+                    return CyclePlan.from_dict(prior["plan"])
+                utc_day = current.date().isoformat()
+                usage = self._usage(state, utc_day)
+                plan = plan_cycle(task_list, policy, usage, now=current)
+                state["reservations"][reservation_id] = {
+                    "request_sha256": request_sha256,
+                    "utc_day": utc_day,
+                    "plan": plan.to_dict(),
+                }
+                self._write_state(state)
+                return plan
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

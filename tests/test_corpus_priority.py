@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import sys
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from corpus_engine_models import CandidateObservation, CandidateRecord, SCORE_COMPONENTS
-from corpus_priority import CandidateTask, PriorityPolicy, UsageSnapshot, plan_cycle
+from corpus_priority import BudgetLedger, CandidateTask, PriorityPolicy, UsageSnapshot, plan_cycle
 
 NOW = datetime(2026, 7, 17, 12, 0, tzinfo=timezone.utc)
 
@@ -47,6 +48,23 @@ def candidate(
     )
 
 
+def reserve_full_budget(args: tuple[str, str]) -> int:
+    ledger_path, reservation_id = args
+    task = CandidateTask(
+        candidate(reservation_id),
+        requires_llm=True,
+        estimated_llm_tokens=50_000,
+        estimated_cost_usd=1.0,
+    )
+    plan = BudgetLedger(Path(ledger_path)).reserve_cycle(
+        reservation_id,
+        [task],
+        PriorityPolicy.default(),
+        now=NOW,
+    )
+    return len(plan.selected)
+
+
 class CorpusPriorityTests(unittest.TestCase):
     def setUp(self) -> None:
         self.policy = PriorityPolicy.default()
@@ -62,6 +80,16 @@ class CorpusPriorityTests(unittest.TestCase):
             document["unexpected"] = True
             path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "unknown policy fields"):
+                PriorityPolicy.from_file(path)
+
+            path.write_text('{"schema_version":1,"schema_version":1}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "duplicate JSON key"):
+                PriorityPolicy.from_file(path)
+
+            document = self.policy.to_dict()
+            document["score_weights"]["relevence"] = 1.0
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unknown score_weights"):
                 PriorityPolicy.from_file(path)
 
         missing_default = self.policy.to_dict()
@@ -158,6 +186,53 @@ class CorpusPriorityTests(unittest.TestCase):
         efficient = CandidateTask(candidate("efficient"), estimated_cost_usd=0.05)
         plan = plan_cycle([expensive, efficient], self.policy, UsageSnapshot(), now=NOW)
         self.assertEqual(plan.selected[0].canonical_url, "https://example.com/efficient")
+
+    def test_reserved_aging_slot_guarantees_eventual_service(self):
+        policy_data = self.policy.to_dict()
+        policy_data["max_items_per_cycle"] = 2
+        policy = PriorityPolicy(**policy_data)
+        old_scores = {key: 0.01 for key in SCORE_COMPONENTS}
+        old_scores["cost"] = 0.01
+        old = CandidateTask(candidate("old-forced", first_seen_at="2026-06-01T00:00:00Z", scores=old_scores))
+        fresh = [
+            CandidateTask(candidate(f"fresh-{index}", scores={"novelty": 0.99}))
+            for index in range(4)
+        ]
+        plan = plan_cycle(fresh + [old], policy, UsageSnapshot(), now=NOW)
+        self.assertIn(old.candidate.candidate_id, {item.candidate_id for item in plan.selected})
+        by_id = {item.candidate_id: item for item in plan.decisions}
+        self.assertIn("reserved_aging_slot", by_id[old.candidate.candidate_id].reason_codes)
+
+    def test_daily_budget_is_atomically_reserved_across_processes(self):
+        with tempfile.TemporaryDirectory() as td:
+            ledger_path = str(Path(td) / "budget.json")
+            ctx = multiprocessing.get_context("spawn")
+            with ctx.Pool(2) as pool:
+                admitted = pool.map(
+                    reserve_full_budget,
+                    [(ledger_path, "cycle-a"), (ledger_path, "cycle-b")],
+                )
+            self.assertEqual(sum(admitted), 1)
+            usage = BudgetLedger(Path(ledger_path)).usage_for_day(NOW)
+            self.assertEqual(usage.deep_acquisitions, 1)
+            self.assertEqual(usage.llm_tasks, 1)
+            self.assertEqual(usage.llm_tokens, 50_000)
+            self.assertEqual(usage.estimated_cost_usd, 1.0)
+
+    def test_budget_reservation_is_idempotent_and_conflicts_fail_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "budget.json"
+            ledger = BudgetLedger(path)
+            task = CandidateTask(candidate("same"), estimated_cost_usd=0.25)
+            first = ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
+            before = path.read_bytes()
+            second = ledger.reserve_cycle("cycle-one", [task], self.policy, now=NOW)
+            self.assertEqual(first.to_dict(), second.to_dict())
+            self.assertEqual(path.read_bytes(), before)
+            conflicting = CandidateTask(candidate("different"), estimated_cost_usd=0.25)
+            with self.assertRaisesRegex(ValueError, "conflicting reservation_id"):
+                ledger.reserve_cycle("cycle-one", [conflicting], self.policy, now=NOW)
+            self.assertEqual(path.read_bytes(), before)
 
 
 if __name__ == "__main__":
