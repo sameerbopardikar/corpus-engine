@@ -21,7 +21,7 @@ from typing import Any, Iterable, Iterator, Mapping
 SCHEMA_VERSION = 1
 EVENT_TYPES = {
     "propose", "add_alias", "merge", "split", "revise", "bound",
-    "supersede", "deprecate", "reject", "restore",
+    "supersede", "deprecate", "reject", "restore", "adopt",
 }
 PAYLOAD_FIELDS = {
     "propose": {"concept_key", "title", "statement", "citations", "rationale"},
@@ -34,6 +34,7 @@ PAYLOAD_FIELDS = {
     "deprecate": {"concept_key", "citations", "rationale"},
     "reject": {"proposal_key", "citations", "rationale"},
     "restore": {"concept_key", "version", "citations", "rationale"},
+    "adopt": {"concept_key", "holder_id", "adoption_receipt", "citations", "rationale"},
 }
 CITATION_FIELDS = {
     "source_id", "page_slug", "locator", "claim_sha256", "evidence_class",
@@ -147,7 +148,8 @@ def _ensure_private_regular(path: Path) -> None:
 class DoctrineEngine:
     """Replayable doctrine projection backed by a chained strict-JSONL ledger."""
 
-    def __init__(self, ledger_path: Path | str):
+    def __init__(self, ledger_path: Path | str, *, domain: str | None = None):
+        self.domain = domain
         self.path = Path(ledger_path)
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.path.parent, 0o700)
@@ -285,10 +287,19 @@ class DoctrineEngine:
             "aliases": normalized_aliases,
             "citations": copy.deepcopy(citations),
             "epistemic_layer": "external_corpus_synthesis",
+            # Generic holder/adoption metadata. Synthesis is never adopted on
+            # creation; adoption happens only via an explicit, receipt-bound
+            # adopt command. sameer_adopted stays as a derived compatibility
+            # projection so existing private Agentic checks keep working.
+            "holder_id": None,
+            "adoption_state": "not_adopted",
+            "adoption_receipt": None,
             "sameer_adopted": False,
             "created_at": moment,
             "updated_at": moment,
         }
+        if self.domain is not None:
+            concept["domain"] = self.domain
         return concept
 
     def _advance(
@@ -335,6 +346,24 @@ class DoctrineEngine:
             self.concepts[key] = concept
             self._record_version(concept)
             return concept
+
+        if event_type == "adopt":
+            canonical, concept = self._require_concept(payload["concept_key"])
+            holder_id = _text(payload["holder_id"], "holder_id")
+            receipt = payload["adoption_receipt"]
+            if not isinstance(receipt, Mapping):
+                raise ValueError("adoption_receipt must be an object")
+            for required in ("receipt_id", "authorized_by", "granted_at"):
+                if not isinstance(receipt.get(required), str) or not receipt[required].strip():
+                    raise ValueError(f"adoption_receipt.{required} must be a non-blank string")
+            updated = self._advance(concept, moment=moment, citations=payload["citations"])
+            updated["holder_id"] = holder_id
+            updated["adoption_state"] = "adopted"
+            updated["adoption_receipt"] = copy.deepcopy(dict(receipt))
+            updated["sameer_adopted"] = holder_id == "sameer"
+            self.concepts[canonical] = updated
+            self._record_version(updated)
+            return updated
 
         if event_type == "reject":
             proposal_key = _key(payload["proposal_key"], "proposal_key")
@@ -569,6 +598,9 @@ class DoctrineEngine:
 
     def deprecate(self, *, command_id: str, concept_key: str, citations: list[dict[str, Any]], rationale: str) -> dict[str, Any]:
         return self._mutate("deprecate", command_id, {"concept_key": concept_key, "citations": citations, "rationale": rationale})
+
+    def adopt(self, *, command_id: str, concept_key: str, holder_id: str, adoption_receipt: dict[str, Any] | None, rationale: str, citations: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        return self._mutate("adopt", command_id, {"concept_key": concept_key, "holder_id": holder_id, "adoption_receipt": adoption_receipt, "citations": citations or [], "rationale": rationale})
 
     def reject(self, *, command_id: str, proposal_key: str, citations: list[dict[str, Any]], rationale: str) -> dict[str, Any]:
         return self._mutate("reject", command_id, {"proposal_key": proposal_key, "citations": citations, "rationale": rationale})

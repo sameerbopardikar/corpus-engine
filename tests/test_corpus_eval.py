@@ -188,6 +188,15 @@ class CorpusEvaluationTests(unittest.TestCase):
         self.assertIn("invalid_evidence_attribution:paper-a", report["failures"])
         self.assertIn("sameer_adoption_forbidden:verification-boundary", report["failures"])
 
+    def test_external_synthesis_rejects_any_holder_adoption(self):
+        doctrine = copy.deepcopy(self.doctrine)
+        # A non-Sameer holder adoption slips past the sameer_adopted projection
+        # but must still be rejected in the external corpus.
+        doctrine["concepts"][0]["adoption_state"] = "adopted"
+        doctrine["concepts"][0]["holder_id"] = "lab-x"
+        report = self.run_eval(doctrine_snapshot=doctrine)
+        self.assertIn("external_adoption_forbidden:verification-boundary", report["failures"])
+
     def test_opposing_evidence_requires_a_bounded_cited_doctrine_concept(self):
         doctrine = copy.deepcopy(self.doctrine)
         doctrine["concepts"][0]["status"] = "probationary"

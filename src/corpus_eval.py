@@ -284,6 +284,10 @@ def evaluate_corpus(
             failures.add(f"invalid_doctrine_attribution:{key}")
         if concept.get("sameer_adopted") is not False:
             failures.add(f"sameer_adoption_forbidden:{key}")
+        # Generic holder-agnostic guard: external corpus synthesis must never
+        # carry adopted belief for ANY holder (missing state defaults not_adopted).
+        if concept.get("adoption_state", "not_adopted") != "not_adopted":
+            failures.add(f"external_adoption_forbidden:{key}")
         citations = concept.get("citations")
         if not isinstance(citations, list) or not citations:
             failures.add(f"citation_missing:{key}")
