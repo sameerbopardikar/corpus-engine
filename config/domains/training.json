@@ -72,18 +72,28 @@
     ]
   },
   "evidence_lanes": {
-    "scientific-evaluation": 1.15,
-    "scientific": 1.1,
-    "production-reliability": 1.05,
-    "implementation-research": 1.0,
-    "practitioner-implementation": 0.95,
-    "practitioner": 0.85,
-    "unverified-discovery-signal": 0.55,
+    "systematic-review": 1.25,
+    "position-stand": 1.15,
+    "primary-study": 1.1,
+    "foundational-text": 1.05,
+    "institutional-source": 1.0,
+    "practitioner-doctrine": 0.9,
+    "experimental-doctrine": 0.7,
+    "mechanism": 0.6,
+    "corpus-synthesis": 0.5,
+    "private-local-proof": 0.45,
+    "testimonial": 0.4,
     "default": 0.85
   },
   "source_families": [
     {
       "family": "peer-reviewed-literature",
+      "acquisition_mode": "public_open_access_fetch",
+      "rights_state": "public_rights_clear",
+      "shared_corpus_eligible": true
+    },
+    {
+      "family": "institutional-position-stand",
       "acquisition_mode": "public_open_access_fetch",
       "rights_state": "public_rights_clear",
       "shared_corpus_eligible": true
@@ -99,6 +109,12 @@
       "acquisition_mode": "authenticated_private_ingest",
       "rights_state": "private_authorized",
       "shared_corpus_eligible": false
+    },
+    {
+      "family": "hyperarch-private-membership",
+      "acquisition_mode": "pointer_only_non_exportable",
+      "rights_state": "private_authorized",
+      "shared_corpus_eligible": false
     }
   ],
   "feedback_profile": {
@@ -111,8 +127,10 @@
     "max_suggestions": 5,
     "family_priority": [
       "peer-reviewed-literature",
+      "institutional-position-stand",
       "practitioner-publications",
-      "personal-training-logs"
+      "personal-training-logs",
+      "hyperarch-private-membership"
     ]
   },
   "bootstrap": {

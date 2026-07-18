@@ -14,10 +14,15 @@
   },
   "applicability": {
     "evidence_lanes_allow": [
-      "scientific-evaluation",
-      "scientific",
-      "practitioner-implementation",
-      "practitioner"
+      "systematic-review",
+      "position-stand",
+      "primary-study",
+      "foundational-text",
+      "institutional-source",
+      "practitioner-doctrine",
+      "experimental-doctrine",
+      "mechanism",
+      "corpus-synthesis"
     ],
     "evidence_lanes_deny": [],
     "rights_allow": [
