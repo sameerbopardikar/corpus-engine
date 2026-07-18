@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "profile_id": "agentic-engineering-default",
+  "version": 1,
+  "domain": "agentic-engineering",
+  "title": "Agentic Engineering Default Feedback Profile",
+  "target_decisions": ["acquisition_ranking", "doctrine_structure"],
+  "score_dimensions": {
+    "demonstrated_practice": 1.15,
+    "production_or_scientific_value": 1.1,
+    "reproducibility": 0.9,
+    "safety_relevance": 0.8,
+    "novelty": 0.4
+  },
+  "applicability": {
+    "evidence_lanes_allow": [
+      "scientific-evaluation",
+      "security-evaluation",
+      "production-reliability",
+      "production-architecture",
+      "implementation-research",
+      "practitioner-implementation"
+    ],
+    "evidence_lanes_deny": [],
+    "rights_allow": [
+      "public_rights_clear",
+      "public_metadata_only",
+      "private_authorized"
+    ]
+  },
+  "outcome_metrics": [
+    {"key": "corpus_recall", "direction": "maximize", "scope": "shared"},
+    {"key": "behavioral_pass_rate", "direction": "maximize", "scope": "shared"},
+    {"key": "regression_incidents", "direction": "minimize", "scope": "shared"},
+    {"key": "operator_private_signal", "direction": "maximize", "scope": "private"}
+  ],
+  "time_horizon_days": 90,
+  "confounders": [
+    "model-version-drift",
+    "benchmark-contamination",
+    "harness-differences"
+  ],
+  "privacy": {
+    "export_scope": "shared",
+    "forbid_private_outcome_export": true
+  },
+  "min_evidence": {
+    "min_corroborations": 1,
+    "min_distinct_sources": 1
+  },
+  "regression_thresholds": {
+    "max_outcome_regression": 0.1
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "profile_id": "training-default",
+  "version": 1,
+  "domain": "training",
+  "title": "Training Default Feedback Profile",
+  "target_decisions": ["acquisition_ranking", "doctrine_structure"],
+  "score_dimensions": {
+    "evidence_strength": 1.2,
+    "mechanistic_grounding": 1.0,
+    "population_match": 0.9,
+    "practitioner_corroboration": 0.6,
+    "novelty": 0.4
+  },
+  "applicability": {
+    "evidence_lanes_allow": [
+      "scientific-evaluation",
+      "scientific",
+      "practitioner-implementation",
+      "practitioner"
+    ],
+    "evidence_lanes_deny": [],
+    "rights_allow": [
+      "public_rights_clear",
+      "public_metadata_only",
+      "private_authorized"
+    ]
+  },
+  "outcome_metrics": [
+    {"key": "corpus_recall", "direction": "maximize", "scope": "shared"},
+    {"key": "evidence_coverage", "direction": "maximize", "scope": "shared"},
+    {"key": "behavioral_pass_rate", "direction": "maximize", "scope": "shared"},
+    {"key": "n_of_1_response", "direction": "maximize", "scope": "private"},
+    {"key": "private_readiness_gain", "direction": "maximize", "scope": "private"}
+  ],
+  "time_horizon_days": 180,
+  "confounders": [
+    "training-age",
+    "nutrition",
+    "sleep",
+    "genetics",
+    "concurrent-training-interference"
+  ],
+  "privacy": {
+    "export_scope": "shared",
+    "forbid_private_outcome_export": true
+  },
+  "min_evidence": {
+    "min_corroborations": 1,
+    "min_distinct_sources": 1
+  },
+  "regression_thresholds": {
+    "max_outcome_regression": 0.1
+  }
+}

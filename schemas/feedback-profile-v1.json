@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "corpus-engine/feedback-profile-v1",
+  "title": "Feedback Profile v1",
+  "description": "Strict, versioned applied-feedback profile. The authoritative validator is corpus_feedback.parse_feedback_profile; this schema documents the contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "profile_id", "version", "domain", "title",
+    "target_decisions", "score_dimensions", "applicability", "outcome_metrics",
+    "time_horizon_days", "confounders", "privacy", "min_evidence",
+    "regression_thresholds"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"},
+    "version": {"type": "integer", "minimum": 1},
+    "domain": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"},
+    "title": {"type": "string", "minLength": 1},
+    "target_decisions": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "score_dimensions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "number", "minimum": 0}
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_lanes_allow", "evidence_lanes_deny", "rights_allow"],
+      "properties": {
+        "evidence_lanes_allow": {"type": "array", "items": {"type": "string"}},
+        "evidence_lanes_deny": {"type": "array", "items": {"type": "string"}},
+        "rights_allow": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "outcome_metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "direction", "scope"],
+        "properties": {
+          "key": {"type": "string", "minLength": 1},
+          "direction": {"enum": ["maximize", "minimize"]},
+          "scope": {"enum": ["shared", "private"]}
+        }
+      }
+    },
+    "time_horizon_days": {"type": "integer", "minimum": 1},
+    "confounders": {"type": "array", "items": {"type": "string"}},
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["export_scope", "forbid_private_outcome_export"],
+      "properties": {
+        "export_scope": {"enum": ["shared", "private"]},
+        "forbid_private_outcome_export": {"type": "boolean"}
+      }
+    },
+    "min_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_corroborations", "min_distinct_sources"],
+      "properties": {
+        "min_corroborations": {"type": "integer", "minimum": 0},
+        "min_distinct_sources": {"type": "integer", "minimum": 0}
+      }
+    },
+    "regression_thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_outcome_regression"],
+      "properties": {
+        "max_outcome_regression": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}
