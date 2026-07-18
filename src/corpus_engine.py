@@ -31,6 +31,7 @@ _SRC_ROOT = Path(__file__).resolve().parent
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
+from corpus_adapters import STANDARD_ADAPTER_FAMILIES, build_adapter
 from corpus_adapters.base import AdapterRunner, SourceAdapter
 from corpus_adapters.github import GitHubRepositoryAdapter
 from corpus_adapters.types import InventoryRequest, RightsState, SourceSpec
@@ -508,17 +509,79 @@ class CorpusEngine:
         slug = self.write_card(entry, entry.get("title", entry["id"]), body, url, None, None)
         return RefreshResult(entry["id"], "registered", [slug], entry.get("status", "registered"), None, url)
 
+    def _dispatch_table(self) -> dict[str, Any]:
+        """Declarative source_type -> handler registry (no vertical if-ladder).
+
+        Lookup happens before any adapter is constructed or run, so an unknown
+        source_type fails closed before any network or filesystem mutation.
+        """
+        table: dict[str, Any] = {
+            "web_document": self.refresh_web,
+            "github_repository": self.refresh_github,
+            "youtube_channel": self.refresh_youtube,
+        }
+        for pointer_type in ("x_discovery", "private_community", "discovery_feed"):
+            table[pointer_type] = lambda entry, prior=None: self.refresh_pointer(entry)
+        for family in STANDARD_ADAPTER_FAMILIES:
+            table[family] = (
+                lambda entry, prior=None, family=family: self.refresh_generic_adapter(entry, prior, family=family)
+            )
+        return table
+
     def refresh_entry(self, entry: dict[str, Any], prior: dict[str, Any] | None = None) -> RefreshResult:
         source_type = entry["source_type"]
-        if source_type == "web_document":
-            return self.refresh_web(entry, prior)
-        if source_type == "github_repository":
-            return self.refresh_github(entry, prior)
-        if source_type == "youtube_channel":
-            return self.refresh_youtube(entry, prior)
-        if source_type in {"x_discovery", "private_community", "discovery_feed"}:
-            return self.refresh_pointer(entry)
-        raise RuntimeError(f"unsupported source_type: {source_type}")
+        handler = self._dispatch_table().get(source_type)
+        if handler is None:
+            raise RuntimeError(f"unsupported source_type: {source_type}")
+        return handler(entry, prior)
+
+    def refresh_generic_adapter(
+        self, entry: dict[str, Any], prior: dict[str, Any] | None = None, *, family: str
+    ) -> RefreshResult:
+        """Uniform refresh for adapters that read their target from the spec locator.
+
+        Wires arXiv/OpenAlex/benchmark/RSS/postmortem through the shared engine
+        without family-specific dispatch. The adapter is constructed via the
+        declarative factory registry; the resulting observation becomes a
+        citation-addressable source card.
+        """
+        locator = entry["url"]
+        adapter = build_adapter(
+            family, self.source_dir(entry["id"]), http_get=request, fetched_at=iso, entry=entry
+        )
+        spec = self.source_spec(entry, family=family, locator=locator)
+        batch = self.run_adapter(entry, adapter, spec, max_items=int(entry.get("max_items", 1)))
+        observation = batch.observations[0]
+        if prior and prior.get("content_hash") == batch.source_revision:
+            return RefreshResult(
+                entry["id"], "unchanged", list(prior.get("pages", [])),
+                "source revision unchanged", batch.source_revision, observation.canonical_locator,
+            )
+        text = Path(observation.normalized_pointer).read_text(encoding="utf-8", errors="replace")
+        excerpt_chars = int(entry.get("card_excerpt_chars", 24000))
+        body = (
+            f"> **Epistemic boundary:** {entry.get('epistemic_note', 'This is attributed external evidence, not settled doctrine.')}\n\n"
+            f"Canonical source: <{observation.canonical_locator}>\n\n"
+            f"Observed source revision: `{batch.source_revision}`.\n\n"
+            f"## Normalized source snapshot\n\n{text[:excerpt_chars]}"
+        )
+        slug = self.write_card(
+            entry,
+            entry.get("title", observation.title),
+            body,
+            observation.canonical_locator,
+            Path(observation.raw_pointer),
+            observation.raw_sha256,
+            extra={
+                "source_revision": batch.source_revision,
+                "normalized_storage_path": observation.normalized_pointer,
+                "normalized_sha256": observation.normalized_sha256,
+            },
+        )
+        return RefreshResult(
+            entry["id"], "refreshed", [slug], f"{len(text)} normalized chars",
+            batch.source_revision, observation.canonical_locator,
+        )
 
     def refresh(self, force: bool = False, only: set[str] | None = None) -> list[RefreshResult]:
         results: list[RefreshResult] = []
