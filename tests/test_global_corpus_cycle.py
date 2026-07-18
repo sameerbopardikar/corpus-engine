@@ -177,6 +177,28 @@ class ManifestEnumerationEntrypointTests(unittest.TestCase):
         changed_summary = json.loads(changed.stdout)
         self.assertNotEqual(first_summary["reservation_id"], changed_summary["reservation_id"])
 
+    def test_default_reservation_changes_with_planner_bytes(self):
+        import importlib.util
+
+        module_path = ROOT / "scripts" / "corpus_global_cycle.py"
+        spec = importlib.util.spec_from_file_location("scheduler_entrypoint", module_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        planner_root = Path(self.tempdir.name) / "planner"
+        (planner_root / "scripts").mkdir(parents=True)
+        (planner_root / "src").mkdir()
+        (planner_root / "scripts" / "corpus_global_cycle.py").write_text("version one\n")
+        (planner_root / "src" / "corpus_priority.py").write_text("policy one\n")
+        config_dir = Path(self.tempdir.name) / "domains-for-code-binding"
+        shutil.copytree(ROOT / "config" / "domains", config_dir)
+
+        first = module.default_reservation_id(config_dir, "2026-07-18", planner_root=planner_root)
+        (planner_root / "src" / "corpus_priority.py").write_text("policy two\n")
+        second = module.default_reservation_id(config_dir, "2026-07-18", planner_root=planner_root)
+        self.assertNotEqual(first, second)
+
     def test_exactly_one_scheduler_cycle_script(self):
         cycle_scripts = list((ROOT / "scripts").glob("*cycle*.sh"))
         self.assertEqual(len(cycle_scripts), 1, f"expected one scheduler script, found {cycle_scripts}")

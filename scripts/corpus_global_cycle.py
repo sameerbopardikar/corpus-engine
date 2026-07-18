@@ -43,9 +43,25 @@ DEFAULT_CONFIG_DIR = _REPO_ROOT / "config" / "domains"
 DEFAULT_BUDGET_PATH = Path("/root/exports/thinker-corpora/_engine/budget.json")
 
 
-def default_reservation_id(config_dir: Path, day: str) -> str:
-    """Bind a daily reservation to the exact domain specs and seed bytes."""
+def default_reservation_id(
+    config_dir: Path, day: str, *, planner_root: Path | None = None
+) -> str:
+    """Bind a daily reservation to exact planner, domain-spec, and seed bytes.
+
+    The planner binding is required when immutable engine releases change during
+    a UTC day. Without it, a corrected release can reuse the prior release's
+    reservation ID with a different command preimage and fail every retry.
+    """
     digest = hashlib.sha256()
+    root = Path(planner_root) if planner_root is not None else _REPO_ROOT
+    planner_paths = [root / "scripts" / "corpus_global_cycle.py"]
+    planner_paths.extend(sorted((root / "src").glob("*.py")))
+    for planner_path in planner_paths:
+        if not planner_path.is_file():
+            continue
+        digest.update(str(planner_path.relative_to(root)).encode())
+        digest.update(b"\0")
+        digest.update(planner_path.read_bytes())
     for spec_path in sorted(Path(config_dir).glob("*.json")):
         spec_bytes = spec_path.read_bytes()
         digest.update(spec_path.name.encode())
