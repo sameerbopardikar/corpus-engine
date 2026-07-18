@@ -18,18 +18,19 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from corpus_adapters.types import RightsState
+from corpus_rights import CANONICAL_RIGHTS, is_shared_corpus_eligible
+
 SPEC_SCHEMA_VERSION = 1
 
-# Canonical rights vocabulary (mirrors corpus_adapters.types.RightsState).
-RIGHTS_STATES = {
-    "public_rights_clear",
-    "public_metadata_only",
-    "private_authorized",
-    "rights_unclear",
-}
+# Canonical rights vocabulary — the single source shared with intake, adapters,
+# discovery, priority, and projections via corpus_rights.
+RIGHTS_STATES = set(CANONICAL_RIGHTS)
 # Only fully rights-cleared families may feed the shared corpus. Everything else
 # (private or unclear) must stay in private/personal storage.
-_SHARED_ELIGIBLE_RIGHTS = {"public_rights_clear"}
+_SHARED_ELIGIBLE_RIGHTS = {
+    state.value for state in RightsState if is_shared_corpus_eligible(state)
+}
 
 _TOP_FIELDS = {
     "schema_version", "domain", "title", "objective", "epistemic_policy",
