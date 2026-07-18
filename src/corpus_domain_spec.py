@@ -13,8 +13,10 @@ declare an unsafe acquisition or export posture.
 """
 from __future__ import annotations
 
+import hashlib
 import json
-from dataclasses import dataclass
+import os
+from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -63,6 +65,16 @@ _EVAL_FIELDS = {
 
 class DomainSpecError(ValueError):
     """Raised when a domain spec is malformed or unsafe to load."""
+
+
+class DomainBootstrapError(DomainSpecError):
+    """Raised when a domain cannot be bootstrapped safely."""
+
+
+# The generalized engine binds every domain to one shared GBrain source. Bootstrap
+# never mints a per-domain source, scheduler, or cron.
+CANONICAL_SOURCE_ID = "corpora"
+BOOTSTRAP_MARKER = "domain-state.json"
 
 
 def _text(value: Any, field_name: str) -> str:
@@ -350,3 +362,103 @@ def load_domain_spec(path: Path | str) -> DomainSpec:
         promotion=_parse_promotion(data["promotion"]),
         eval_requirements=_parse_eval_requirements(data["eval_requirements"]),
     )
+
+
+def _spec_identity(spec: DomainSpec) -> dict[str, Any]:
+    """Deterministic identity of a spec's full content (for conflict detection)."""
+    return {
+        "schema_version": spec.schema_version,
+        "domain": spec.domain,
+        "title": spec.title,
+        "objective": spec.objective,
+        "epistemic_policy": spec.epistemic_policy,
+        "seed_ref": spec.seed_ref,
+        "roots": spec.roots,
+        "ontology_axes": [asdict(axis) for axis in spec.ontology_axes],
+        "evidence_lanes": spec.evidence_lanes,
+        "source_families": [asdict(family) for family in spec.source_families],
+        "feedback_profile": spec.feedback_profile,
+        "acquisition_policy": {
+            "max_suggestions": spec.acquisition_policy["max_suggestions"],
+            "family_priority": list(spec.acquisition_policy["family_priority"]),
+        },
+        "bootstrap": spec.bootstrap,
+        "promotion": spec.promotion,
+        "eval_requirements": spec.eval_requirements,
+    }
+
+
+def spec_digest(spec: DomainSpec) -> str:
+    """SHA-256 over a spec's canonicalized full content."""
+    blob = json.dumps(
+        _spec_identity(spec), sort_keys=True, ensure_ascii=False,
+        allow_nan=False, separators=(",", ":"),
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def bootstrap_domain(
+    spec: DomainSpec,
+    base_dir: Path | str,
+    *,
+    now: str,
+    source_id: str = CANONICAL_SOURCE_ID,
+) -> dict[str, Any]:
+    """Physically create a domain's directories and state marker only.
+
+    Idempotent: a repeat call with the same spec is a byte-level no-op. Every
+    unsafe condition — overriding the canonical source, a root that escapes the
+    base (traversal or symlink), or a conflicting spec/version already present —
+    fails closed *before* any directory or marker is created. Bootstrap never
+    creates a GBrain source, scheduler, or cron.
+    """
+    if source_id != CANONICAL_SOURCE_ID:
+        raise DomainBootstrapError(
+            f"domain bootstrap may not override the canonical source id {CANONICAL_SOURCE_ID!r}"
+        )
+    base = Path(base_dir)
+    if base.is_symlink():
+        raise DomainBootstrapError(f"base_dir must not be a symlink: {base}")
+    resolved_base = base.resolve()
+
+    # Resolve and guard every root before any mutation.
+    planned: dict[str, Path] = {}
+    for name in sorted(spec.roots):
+        target = base / spec.roots[name]
+        resolved = target.resolve()
+        if resolved != resolved_base and resolved_base not in resolved.parents:
+            raise DomainBootstrapError(f"root {name!r} escapes base_dir: {resolved}")
+        planned[name] = target
+
+    digest = spec_digest(spec)
+    marker = planned["state_root"] / BOOTSTRAP_MARKER
+    if marker.exists():
+        try:
+            existing = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise DomainBootstrapError(f"unreadable domain-state marker: {exc}") from exc
+        if existing.get("domain") != spec.domain or existing.get("spec_digest") != digest:
+            raise DomainBootstrapError(
+                "conflicting domain spec/version already bootstrapped at this location"
+            )
+        return existing  # physical no-op
+
+    for target in planned.values():
+        target.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    receipt = {
+        "schema_version": SPEC_SCHEMA_VERSION,
+        "domain": spec.domain,
+        "spec_digest": digest,
+        "source_id": CANONICAL_SOURCE_ID,
+        "roots": {name: str(planned[name]) for name in sorted(planned)},
+        "created_at": now,
+        "gbrain_source_created": False,
+        "scheduler_created": False,
+    }
+    encoded = json.dumps(receipt, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    temp = marker.with_suffix(marker.suffix + ".tmp")
+    temp.write_text(encoded, encoding="utf-8")
+    os.chmod(temp, 0o600)
+    os.replace(temp, marker)
+    return receipt

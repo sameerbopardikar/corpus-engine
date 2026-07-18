@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "domain": "astronomy-observing",
+  "title": "Amateur Astronomy Observing Corpus",
+  "objective": "An arbitrary third domain used only to prove the engine boots any domain from a checked-in spec with no Python edits.",
+  "epistemic_policy": "capture-all-promote-by-evidence-v1",
+  "seed_ref": "docs/source-maps/astronomy-observing-seed-candidates.json",
+  "roots": {
+    "corpus_root": "astronomy-observing",
+    "state_root": "astronomy-observing/self-expansion-v1",
+    "archive_root": "astronomy-observing/archive",
+    "output_root": "astronomy-observing/discovery/domain-v1"
+  },
+  "ontology": {
+    "axes": [
+      {
+        "key": "targets",
+        "title": "Observing Target Axis",
+        "topics": [
+          "deep-sky-object",
+          "planetary",
+          "lunar",
+          "variable-star"
+        ]
+      },
+      {
+        "key": "instrumentation",
+        "title": "Instrumentation Axis",
+        "topics": [
+          "reflector",
+          "refractor",
+          "eyepiece",
+          "astrophotography-rig"
+        ]
+      },
+      {
+        "key": "conditions",
+        "title": "Observing Conditions Axis",
+        "topics": [
+          "seeing",
+          "transparency",
+          "light-pollution"
+        ]
+      }
+    ]
+  },
+  "evidence_lanes": {
+    "scientific": 1.1,
+    "practitioner": 0.9,
+    "unverified-discovery-signal": 0.55,
+    "default": 0.85
+  },
+  "source_families": [
+    {
+      "family": "peer-reviewed-literature",
+      "acquisition_mode": "public_open_access_fetch",
+      "rights_state": "public_rights_clear",
+      "shared_corpus_eligible": true
+    },
+    {
+      "family": "hobbyist-forum",
+      "acquisition_mode": "public_metadata_capture",
+      "rights_state": "public_metadata_only",
+      "shared_corpus_eligible": false
+    }
+  ],
+  "feedback_profile": {
+    "corroboration_increment": 0.1,
+    "starvation_age_boost_per_day": 0.03,
+    "starvation_max_boost": 0.3,
+    "yield_target_per_cycle": 1
+  },
+  "acquisition_policy": {
+    "max_suggestions": 3,
+    "family_priority": [
+      "peer-reviewed-literature",
+      "hobbyist-forum"
+    ]
+  },
+  "bootstrap": {
+    "max_items_per_cycle": 2,
+    "max_deep_acquisitions_per_utc_day": 1,
+    "max_llm_tasks_per_cycle": 0,
+    "max_cost_usd_per_utc_day": 0.0
+  },
+  "promotion": {
+    "automatic_promotion_enabled": false,
+    "probationary_threshold": 0.35,
+    "promotion_threshold": 0.65,
+    "rejection_threshold": 0.1
+  },
+  "eval_requirements": {
+    "min_corpus_pages_scanned": 0,
+    "require_axes_in_field_map": true,
+    "forbid_private_export_to_shared": true,
+    "require_next_gap": true
+  }
+}
