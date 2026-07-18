@@ -22,8 +22,13 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SRC = _REPO_ROOT / "src"
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+# The script directory is sys.path[0] when this file is executed directly and
+# contains this entrypoint under the same basename as src/corpus_global_cycle.py.
+# Force src to the front even when PYTHONPATH already contains it, otherwise
+# Python imports this partially initialized script as its own library module.
+while str(_SRC) in sys.path:
+    sys.path.remove(str(_SRC))
+sys.path.insert(0, str(_SRC))
 
 from corpus_discovery import score_observation
 from corpus_domain_spec import load_domain_spec
