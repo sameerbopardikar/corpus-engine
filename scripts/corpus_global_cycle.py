@@ -90,7 +90,7 @@ def _domain_loader(spec, seed_path: Path):
         if bundle.domain != spec.domain:
             raise ValueError(f"seed domain {bundle.domain!r} != spec domain {spec.domain!r}")
         tasks: list[CandidateTask] = []
-        for observation in bundle.observations(source_ref=str(seed_path)):
+        for observation in bundle.observations(source_ref=spec.seed_ref):
             scores, rationale = score_observation(observation)
             record = CandidateRecord.from_observation(
                 observation, scores, rationale=rationale, rights_state="rights_unclear"

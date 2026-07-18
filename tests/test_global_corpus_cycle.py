@@ -153,6 +153,12 @@ class ManifestEnumerationEntrypointTests(unittest.TestCase):
         self.assertIn("agentic-engineering", summary["domains_planned"])
         self.assertIn("training", summary["domains_planned"])
         self.assertEqual(summary["failures"], [])
+        budget = json.loads(self.budget.read_text(encoding="utf-8"))
+        request = next(iter(budget["reservations"].values()))["request"]
+        pointers = [item["candidate"]["evidence_pointer"] for item in request["tasks"]]
+        self.assertTrue(pointers)
+        self.assertTrue(all(not pointer.startswith("/") for pointer in pointers), pointers)
+        self.assertTrue(all(pointer.startswith("docs/source-maps/") for pointer in pointers), pointers)
 
     def test_default_reservation_replays_same_bytes_and_changes_with_manifest(self):
         import subprocess
