@@ -202,6 +202,8 @@ class ManifestEnumerationEntrypointTests(unittest.TestCase):
     def test_exactly_one_scheduler_cycle_script(self):
         cycle_scripts = list((ROOT / "scripts").glob("*cycle*.sh"))
         self.assertEqual(len(cycle_scripts), 1, f"expected one scheduler script, found {cycle_scripts}")
+        script = cycle_scripts[0].read_text(encoding="utf-8")
+        self.assertIn('CORPUS_INTAKE_ROOT="${AGENTIC_CORPUS_INTAKE_ROOT:-/var/lib/agentic-corpus-intake}"', script)
 
 
 if __name__ == "__main__":

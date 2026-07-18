@@ -26,8 +26,9 @@ cat "$GLOBAL_RESULT"
 # keeps existing deployments working without making the scheduler Agentic-only.
 if command -v corpus-intake >/dev/null 2>&1 \
    && [[ -d /root/corpora/agentic-engineering ]]; then
-  corpus-intake process --all \
-    --corpus-root /root/corpora/agentic-engineering || true
+  CORPUS_INTAKE_ROOT="${AGENTIC_CORPUS_INTAKE_ROOT:-/var/lib/agentic-corpus-intake}" \
+    corpus-intake process --all \
+      --corpus-root /root/corpora/agentic-engineering || true
 fi
 
 if command -v agentic-engineering-shadow >/dev/null 2>&1 \
