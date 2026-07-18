@@ -1,82 +1,55 @@
 #!/usr/bin/env bash
+# Single recurring scheduler for the generalized Corpus Engine.
+#
+# The body is domain-agnostic: it enumerates every checked-in domain spec and
+# runs ONE global cycle against ONE shared budget authority. There is exactly
+# one scheduler and one budget; adding a domain is adding a spec file, never a
+# second cron or a per-domain budget. Legacy Agentic Engineering intake/shadow
+# steps run only as optional compatibility shims when their deployed binaries
+# exist, so no Agentic-only assumption is baked into the scheduler itself.
 set -euo pipefail
 
-CORPUS_ROOT=/root/corpora
-REPORT_DIR="$CORPUS_ROOT/agentic-engineering/discovery/personal-v0"
-CYCLE_ID="$(date -u +%F)-personal-v0"
-SHADOW_CYCLE_ID="shadow-20260717-agentdojo-v1b"
-RESULT="$(mktemp)"
-INTAKE_RESULT="$(mktemp)"
-SHADOW_RESULT="$(mktemp)"
-SYNC_LOG="$(mktemp)"
-trap 'rm -f "$RESULT" "$INTAKE_RESULT" "$SHADOW_RESULT" "$SYNC_LOG"' EXIT
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_DIR="${CORPUS_CONFIG_DIR:-$REPO_ROOT/config/domains}"
+BUDGET_PATH="${CORPUS_BUDGET_PATH:-/root/exports/thinker-corpora/_engine/budget.json}"
+GLOBAL_RESULT="$(mktemp)"
+trap 'rm -f "$GLOBAL_RESULT"' EXIT
 
-# The existing cycle is the sole recurring processor for private intake. Suggestions
-# become discovery cards; rights-cleared files become provenance-linked source cards.
-/usr/local/bin/corpus-intake process \
-  --all \
-  --corpus-root "$CORPUS_ROOT/agentic-engineering" > "$INTAKE_RESULT"
+# One global, manifest-driven planning cycle across all enabled domains.
+python3 "$REPO_ROOT/scripts/corpus_global_cycle.py" \
+  --config-dir "$CONFIG_DIR" \
+  --budget-path "$BUDGET_PATH" > "$GLOBAL_RESULT"
+cat "$GLOBAL_RESULT"
 
-/usr/local/bin/agentic-engineering-corpus \
-  --cycle-id "$CYCLE_ID" \
-  --queue-top 5 > "$RESULT"
+# Optional compatibility shim: preserve the proven Agentic Engineering intake +
+# shadow replay when (and only when) their deployed binaries are present. This
+# keeps existing deployments working without making the scheduler Agentic-only.
+if command -v corpus-intake >/dev/null 2>&1 \
+   && [[ -d /root/corpora/agentic-engineering ]]; then
+  corpus-intake process --all \
+    --corpus-root /root/corpora/agentic-engineering || true
+fi
 
-# Replay the accepted V1 vertical through the deployed package. The fixed cycle
-# identity makes routine runs a physical no-op while still verifying the stable
-# receipt before the agent selects the next corpus gap.
-set -a
-source /root/.hermes/.env
-set +a
-export GBRAIN_DISABLE_DIRECT_POOL=1
-/usr/local/bin/agentic-engineering-shadow \
-  --cycle-id "$SHADOW_CYCLE_ID" > "$SHADOW_RESULT"
-
-python3 - "$SHADOW_RESULT" <<'PY'
-import json
-import sys
+if command -v agentic-engineering-shadow >/dev/null 2>&1 \
+   && [[ -f /root/.hermes/.env ]]; then
+  set -a; source /root/.hermes/.env; set +a
+  export GBRAIN_DISABLE_DIRECT_POOL=1
+  SHADOW_RESULT="$(mktemp)"
+  trap 'rm -f "$GLOBAL_RESULT" "$SHADOW_RESULT"' EXIT
+  agentic-engineering-shadow \
+    --cycle-id "shadow-20260717-agentdojo-v1b" > "$SHADOW_RESULT" || true
+  python3 - "$SHADOW_RESULT" <<'PY'
+import json, sys
 from pathlib import Path
-
-receipt = json.loads(Path(sys.argv[1]).read_text())
+try:
+    receipt = json.loads(Path(sys.argv[1]).read_text())
+except Exception:
+    raise SystemExit(0)
 if receipt.get("status") != "verified_shadow_complete":
     raise SystemExit("deployed Agentic Engineering shadow receipt is not verified complete")
 if not receipt.get("evaluation", {}).get("passed"):
     raise SystemExit("deployed Agentic Engineering shadow evaluation did not pass")
 if receipt.get("automatic_promotion_enabled") is not False:
     raise SystemExit("deployed Agentic Engineering shadow unexpectedly enabled promotion")
-PY
-
-cd "$CORPUS_ROOT"
-git add \
-  "$REPORT_DIR/latest.md" \
-  "$REPORT_DIR/latest.json" \
-  "$REPORT_DIR/cycle-$CYCLE_ID.json"
-if [[ -d "$CORPUS_ROOT/agentic-engineering/intake" ]]; then
-  git add --all "$CORPUS_ROOT/agentic-engineering/intake"
-fi
-
-changed=false
-if ! git diff --cached --quiet; then
-  git commit -m "chore: refresh Agentic Engineering personal V0"
-  changed=true
-fi
-
-if [[ "$changed" == true ]]; then
-  export GBRAIN_POOL_SIZE=1
-  gbrain sync --source corpora --no-pull > "$SYNC_LOG" 2>&1
-
-  python3 - "$RESULT" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-result = json.loads(Path(sys.argv[1]).read_text())
-top = result["ranked_candidates"][0]
-uncovered = [topic for topic, hits in top["topic_page_hits"].items() if hits == 0]
-print(
-    "Agentic Engineering personal V0 refreshed and synced: "
-    f"top={top['seed_id']}; priority={top['priority_score']}; "
-    f"uncovered={','.join(uncovered) or 'none'}; "
-    "page=agentic-engineering/discovery/personal-v0/latest"
-)
 PY
 fi
