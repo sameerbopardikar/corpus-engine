@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -152,6 +153,29 @@ class ManifestEnumerationEntrypointTests(unittest.TestCase):
         self.assertIn("agentic-engineering", summary["domains_planned"])
         self.assertIn("training", summary["domains_planned"])
         self.assertEqual(summary["failures"], [])
+
+    def test_default_reservation_replays_same_bytes_and_changes_with_manifest(self):
+        import subprocess
+        config_dir = Path(self.tempdir.name) / "domains"
+        shutil.copytree(ROOT / "config" / "domains", config_dir)
+        command = [
+            sys.executable, str(ROOT / "scripts" / "corpus_global_cycle.py"),
+            "--config-dir", str(config_dir), "--budget-path", str(self.budget),
+        ]
+        first = subprocess.run(command, capture_output=True, text=True)
+        second = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        first_summary = json.loads(first.stdout)
+        second_summary = json.loads(second.stdout)
+        self.assertEqual(first_summary["reservation_id"], second_summary["reservation_id"])
+
+        training_spec = config_dir / "training.json"
+        training_spec.write_text(training_spec.read_text() + "\n", encoding="utf-8")
+        changed = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+        changed_summary = json.loads(changed.stdout)
+        self.assertNotEqual(first_summary["reservation_id"], changed_summary["reservation_id"])
 
     def test_exactly_one_scheduler_cycle_script(self):
         cycle_scripts = list((ROOT / "scripts").glob("*cycle*.sh"))

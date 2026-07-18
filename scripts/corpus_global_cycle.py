@@ -15,6 +15,7 @@ script while preserving the one-scheduler / one-global-budget invariant.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -40,6 +41,25 @@ from corpus_seed_loader import load_candidate_seed
 DEFAULT_CONFIG_DIR = _REPO_ROOT / "config" / "domains"
 # One shared budget authority for the whole engine — never per-domain.
 DEFAULT_BUDGET_PATH = Path("/root/exports/thinker-corpora/_engine/budget.json")
+
+
+def default_reservation_id(config_dir: Path, day: str) -> str:
+    """Bind a daily reservation to the exact domain specs and seed bytes."""
+    digest = hashlib.sha256()
+    for spec_path in sorted(Path(config_dir).glob("*.json")):
+        spec_bytes = spec_path.read_bytes()
+        digest.update(spec_path.name.encode())
+        digest.update(b"\0")
+        digest.update(spec_bytes)
+        raw = json.loads(spec_bytes)
+        seed_ref = raw.get("seed_ref")
+        if not isinstance(seed_ref, str) or not seed_ref:
+            continue
+        seed_path = _REPO_ROOT / seed_ref
+        digest.update(seed_ref.encode())
+        digest.update(b"\0")
+        digest.update(seed_path.read_bytes())
+    return f"global-{day}-{digest.hexdigest()[:16]}"
 
 
 def enumerate_domain_specs(config_dir: Path):
@@ -88,16 +108,28 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run one global corpus cycle across all enabled domains.")
     parser.add_argument("--config-dir", default=str(DEFAULT_CONFIG_DIR))
     parser.add_argument("--budget-path", default=str(DEFAULT_BUDGET_PATH))
-    parser.add_argument("--reservation-id", default=f"global-{datetime.now(timezone.utc).date().isoformat()}")
+    parser.add_argument("--reservation-id")
     args = parser.parse_args(argv)
+    clock_now = datetime.now(timezone.utc)
+    if args.reservation_id:
+        reservation_id = args.reservation_id
+        now = clock_now
+    else:
+        # A daily scheduler retry must replay the exact same command preimage.
+        # Wall-clock microseconds would make an otherwise identical retry conflict.
+        now = clock_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        reservation_id = default_reservation_id(
+            Path(args.config_dir), now.date().isoformat()
+        )
     result = run(
         config_dir=Path(args.config_dir),
         budget_ledger_path=Path(args.budget_path),
-        reservation_id=args.reservation_id,
-        now=datetime.now(timezone.utc),
+        reservation_id=reservation_id,
+        now=now,
     )
     summary = {
         "status": result["status"],
+        "reservation_id": reservation_id,
         "domains_planned": result["domains_planned"],
         "failures": result["failures"],
         "selected_candidate_ids": result["selected_candidate_ids"],
