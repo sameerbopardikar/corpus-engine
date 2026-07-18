@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "domain": "training",
+  "title": "Training Operating Corpus",
+  "objective": "Continuously understand and improve human physical training across strength, hypertrophy, power, speed, endurance, explosiveness, VO2 max and cardio, grounding practice in mechanical and adaptive evidence.",
+  "epistemic_policy": "capture-all-promote-by-evidence-v1",
+  "seed_ref": "docs/source-maps/training-seed-candidates.json",
+  "roots": {
+    "corpus_root": "training",
+    "state_root": "training/self-expansion-v1",
+    "archive_root": "training/archive",
+    "output_root": "training/discovery/domain-v1"
+  },
+  "ontology": {
+    "axes": [
+      {
+        "key": "mechanical-force-velocity",
+        "title": "Force-Velocity Mechanical Axis",
+        "topics": [
+          "force-velocity",
+          "load-velocity",
+          "power-output",
+          "rate-of-force-development",
+          "contractile-velocity"
+        ]
+      },
+      {
+        "key": "adaptation",
+        "title": "Physiological Adaptation Axis",
+        "topics": [
+          "hypertrophy",
+          "strength",
+          "power",
+          "speed",
+          "endurance",
+          "explosiveness",
+          "vo2-max",
+          "cardio"
+        ]
+      },
+      {
+        "key": "method",
+        "title": "Training Method Axis",
+        "topics": [
+          "periodization",
+          "plyometrics",
+          "resistance-training",
+          "interval-training",
+          "fascia-training"
+        ]
+      },
+      {
+        "key": "performance-expression",
+        "title": "Performance Expression Axis",
+        "topics": [
+          "vertical-jump",
+          "sprint-speed",
+          "one-rep-max",
+          "work-capacity"
+        ]
+      },
+      {
+        "key": "constraints",
+        "title": "Constraint And Recovery Axis",
+        "topics": [
+          "recovery",
+          "fatigue",
+          "injury-risk",
+          "mobility"
+        ]
+      }
+    ]
+  },
+  "evidence_lanes": {
+    "scientific-evaluation": 1.15,
+    "scientific": 1.1,
+    "production-reliability": 1.05,
+    "implementation-research": 1.0,
+    "practitioner-implementation": 0.95,
+    "practitioner": 0.85,
+    "unverified-discovery-signal": 0.55,
+    "default": 0.85
+  },
+  "source_families": [
+    {
+      "family": "peer-reviewed-literature",
+      "acquisition_mode": "public_open_access_fetch",
+      "rights_state": "public_rights_clear",
+      "shared_corpus_eligible": true
+    },
+    {
+      "family": "practitioner-publications",
+      "acquisition_mode": "public_metadata_capture",
+      "rights_state": "public_metadata_only",
+      "shared_corpus_eligible": false
+    },
+    {
+      "family": "personal-training-logs",
+      "acquisition_mode": "authenticated_private_ingest",
+      "rights_state": "private_authorized",
+      "shared_corpus_eligible": false
+    }
+  ],
+  "feedback_profile": {
+    "corroboration_increment": 0.1,
+    "starvation_age_boost_per_day": 0.03,
+    "starvation_max_boost": 0.3,
+    "yield_target_per_cycle": 1
+  },
+  "acquisition_policy": {
+    "max_suggestions": 5,
+    "family_priority": [
+      "peer-reviewed-literature",
+      "practitioner-publications",
+      "personal-training-logs"
+    ]
+  },
+  "bootstrap": {
+    "max_items_per_cycle": 3,
+    "max_deep_acquisitions_per_utc_day": 3,
+    "max_llm_tasks_per_cycle": 1,
+    "max_cost_usd_per_utc_day": 1.0
+  },
+  "promotion": {
+    "automatic_promotion_enabled": false,
+    "probationary_threshold": 0.35,
+    "promotion_threshold": 0.65,
+    "rejection_threshold": 0.1
+  },
+  "eval_requirements": {
+    "min_corpus_pages_scanned": 0,
+    "require_axes_in_field_map": true,
+    "forbid_private_export_to_shared": true,
+    "require_next_gap": true
+  }
+}
