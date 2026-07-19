@@ -252,6 +252,19 @@ class CorpusPriorityTests(unittest.TestCase):
                 (lock_before_stat.st_ino, lock_before_stat.st_mtime_ns, lock_before_stat.st_ctime_ns),
             )
 
+    def test_budget_reservation_normalizes_subsecond_clock_for_durable_replay(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "budget.json"
+            ledger = BudgetLedger(path)
+            now = datetime(2026, 7, 17, 12, 0, 0, 190000, tzinfo=timezone.utc)
+            task = CandidateTask(
+                candidate("subsecond", first_seen_at="2026-07-17T12:00:00Z"),
+                estimated_cost_usd=0.25,
+            )
+            first = ledger.reserve_cycle("cycle-subsecond", [task], self.policy, now=now)
+            self.assertEqual(first.decisions[0].starvation_boost, 0.0)
+            self.assertEqual(ledger.usage_for_day(now).deep_acquisitions, 1)
+
     def test_budget_ledger_rejects_forged_accounting(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "budget.json"

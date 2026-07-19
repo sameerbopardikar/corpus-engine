@@ -796,7 +796,10 @@ class BudgetLedger:
     ) -> CyclePlan:
         if not isinstance(reservation_id, str) or not reservation_id.strip():
             raise ValueError("reservation_id must be a non-blank string")
-        current = _aware(now)
+        # The durable request serializes timestamps to whole seconds. Normalize
+        # before planning too; otherwise a subsecond starvation boost is stored
+        # but cannot be reproduced from the persisted request on replay.
+        current = _aware(now).replace(microsecond=0)
         task_list = tuple(tasks)
         request = {
             "reservation_id": reservation_id,

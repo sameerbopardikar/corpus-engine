@@ -1,0 +1,8 @@
+# Runtime dependencies for the Self-Expanding Corpus Engine.
+#
+# The generic acquisition transport (corpus_live_fetch) is stdlib-only and
+# SSRF-guarded, so the daily global cycle needs no third-party package. The
+# broader engine's source adapters (corpus_adapters.arxiv/openalex/rss/web/...)
+# still perform HTTP via `requests`, which the adapter package imports eagerly,
+# so it is a declared runtime dependency of the engine as a whole.
+requests>=2.31,<3
