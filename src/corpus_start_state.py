@@ -117,12 +117,14 @@ class StartRunState:
         now: str,
         clean_root: bool = True,
         run_id: str | None = None,
+        corpora_base: Path | str | None = None,
     ) -> "StartRunState":
         run_root = Path(run_root)
         if not isinstance(topic, str) or not topic.strip():
             raise StartRunError("topic must be a non-empty string")
         topic = topic.strip()
         derived_id = validate_slug(run_id) if run_id is not None else derive_slug(topic)
+        resolved_corpora_base = str(Path(corpora_base).resolve()) if corpora_base is not None else None
 
         path = _state_path(run_root)
         if path.exists():
@@ -133,6 +135,8 @@ class StartRunState:
                 )
             if bool(existing._data.get("clean_root", True)) != bool(clean_root):
                 raise StartRunConflictError("run already initialized with a different clean_root")
+            if existing._data.get("corpora_base") != resolved_corpora_base:
+                raise StartRunConflictError("run already initialized with a different corpora_base")
             return existing
 
         data = {
@@ -140,6 +144,7 @@ class StartRunState:
             "run_id": derived_id,
             "topic_input": topic,
             "clean_root": bool(clean_root),
+            "corpora_base": resolved_corpora_base,
             "domain": None,
             "packet_sha256": None,
             "phase": "initialized",
@@ -191,6 +196,11 @@ class StartRunState:
     @property
     def clean_root(self) -> bool:
         return bool(self._data.get("clean_root", True))
+
+    @property
+    def corpora_base(self) -> Path | None:
+        value = self._data.get("corpora_base")
+        return Path(value) if value else None
 
     @property
     def run_id(self) -> str:

@@ -14,6 +14,7 @@ from corpus_acquisition_executor import (
     AcquisitionExecutor,
     AcquisitionExecutorError,
     FetchResult,
+    retrieval_topic_matches,
 )
 from corpus_engine_models import CandidateObservation
 from corpus_rights_resolver import RightsEvidence
@@ -304,6 +305,32 @@ class AcquisitionFailureTests(ExecutorHarness):
 
 
 class EvaluationRollbackTests(ExecutorHarness):
+    def test_generated_composite_topic_matches_domain_and_title_semantics(self):
+        candidate = _candidate(
+            domain="nutrition",
+            topics=("nutrition-foundations",),
+            title="Dietary intakes and nutrition status among young children",
+        )
+        self.assertTrue(
+            retrieval_topic_matches(
+                candidate,
+                "Food security and dietary intake were measured before harvest.",
+            )
+        )
+
+    def test_generated_composite_topic_rejects_unrelated_title_and_content(self):
+        candidate = _candidate(
+            domain="nutrition",
+            topics=("nutrition-foundations",),
+            title="Distributed database replication under network partitions",
+        )
+        self.assertFalse(
+            retrieval_topic_matches(
+                candidate,
+                "This systems paper evaluates consensus latency and storage throughput.",
+            )
+        )
+
     def test_retrieval_failure_quarantines_staged_page(self):
         # Body contains none of the candidate topics -> retrieval eval fails.
         fetcher = _FakeFetcher(
@@ -313,7 +340,10 @@ class EvaluationRollbackTests(ExecutorHarness):
                 content_type="text/html",
             )
         )
-        candidate = _candidate(topics=("hypertrophy",))
+        candidate = _candidate(
+            topics=("hypertrophy",),
+            title="Distributed database replication under network partitions",
+        )
         receipt = self._executor(fetcher).acquire(candidate)
         self.assertEqual(receipt["disposition"], "quarantined")
         self.assertEqual(receipt["terminal_state"], "quarantined")
@@ -479,7 +509,12 @@ class CanonicalWriteTests(ExecutorHarness):
                 final_url="https://example.org/vbt", content_type="text/html",
             )
         )
-        receipt = self._canonical_executor(fetcher).acquire(_candidate(topics=("hypertrophy",)))
+        receipt = self._canonical_executor(fetcher).acquire(
+            _candidate(
+                topics=("hypertrophy",),
+                title="Distributed database replication under network partitions",
+            )
+        )
         self.assertEqual(receipt["disposition"], "quarantined")
         self.assertFalse(receipt["canonical_mutated"])
         self.assertIsNone(receipt["canonical"])

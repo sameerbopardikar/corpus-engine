@@ -62,6 +62,18 @@ DEFAULT_ALLOWED_MIME = frozenset(
 # reported as acquired and never fabricated from a landing shell.
 GATED_DOCUMENT_MIME = frozenset({"application/pdf"})
 _SAFE_SLUG = re.compile(r"[^A-Za-z0-9._-]+")
+_SEMANTIC_TOKEN = re.compile(r"[a-z0-9]+")
+# Topic packets use structural suffixes to organize a field map. Those words
+# are not, by themselves, evidence that a retrieved document is about the
+# requested domain. Keep the domain/topic nouns and discard only this small,
+# generic orchestration vocabulary.
+_TOPIC_SCAFFOLD_TOKENS = frozenset(
+    {
+        "foundation", "foundations", "mechanism", "mechanisms",
+        "evidence", "outcome", "outcomes", "intervention", "interventions",
+        "practice", "practices", "risk", "risks", "implementation",
+    }
+)
 
 
 class AcquisitionExecutorError(RuntimeError):
@@ -137,6 +149,28 @@ def _normalize_text(body: bytes, content_type: str) -> str:
         parser.feed(decoded)
         return parser.text()
     return decoded.strip() + "\n"
+
+
+def retrieval_topic_matches(candidate: AcquisitionCandidate, text: str) -> bool:
+    """Fail-closed topical retrieval check over normalized semantic tokens.
+
+    Generated field-map labels such as ``nutrition-foundations`` are routing
+    identifiers, not phrases a real paper must contain verbatim. Match their
+    discriminative tokens (plus the domain tokens) as whole normalized words in
+    the retrieved text or discovered title. Unrelated content still fails:
+    generic structural suffixes never count as evidence and an empty semantic
+    query cannot pass.
+    """
+    query_tokens: set[str] = set()
+    for value in (candidate.domain, *candidate.topics):
+        query_tokens.update(
+            token for token in _SEMANTIC_TOKEN.findall(value.lower())
+            if len(token) >= 3 and token not in _TOPIC_SCAFFOLD_TOKENS
+        )
+    if not query_tokens:
+        return False
+    evidence_tokens = set(_SEMANTIC_TOKEN.findall(f"{candidate.title}\n{text}".lower()))
+    return bool(query_tokens & evidence_tokens)
 
 
 def _safe_http_locator(url: str | None) -> bool:
@@ -645,9 +679,9 @@ class AcquisitionExecutor:
         # Provenance: the staged page carries rights-cleared provenance.
         staged_text = staged_path.read_text(encoding="utf-8")
         checks["provenance_rights_clear"] = "public_rights_clear" in staged_text and candidate.canonical_locator in staged_text
-        # Retrieval: at least one topic term is retrievable from the normalized text.
-        lowered = text.lower()
-        checks["retrieval_topic_hit"] = any(topic.lower() in lowered for topic in candidate.topics)
+        # Retrieval: generated composite labels are routing IDs, so compare
+        # normalized semantic topic/domain tokens against full text + title.
+        checks["retrieval_topic_hit"] = retrieval_topic_matches(candidate, text)
         failures = [name for name, ok in checks.items() if not ok]
         return {"passed": not failures, "checks": checks, "failures": failures}
 

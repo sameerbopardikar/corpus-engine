@@ -27,7 +27,7 @@ class _FakeHandle:
         self.stopped = True
 
 
-def _make_probe(*, health_ok=True, ready_ok=True, index=None):
+def _make_probe(*, health_ok=True, ready_ok=True, index=None, acquisition=None):
     calls = []
 
     def probe(url):
@@ -38,6 +38,8 @@ def _make_probe(*, health_ok=True, ready_ok=True, index=None):
             return (200 if ready_ok else 503), {}
         if url.endswith("/api/index"):
             return 200, (index or {})
+        if url.endswith("/api/acquisition"):
+            return 200, (acquisition or {"domain": "nutrition"})
         raise AssertionError(f"unexpected probe url {url}")
 
     probe.calls = calls  # type: ignore[attr-defined]
@@ -59,11 +61,24 @@ class BuildConfigTest(unittest.TestCase):
         )
         env = config["env"]
         self.assertEqual(env["CORPUS_ROOT"], str(self.run_root / "corpora" / "nutrition"))
-        self.assertEqual(env["ATLAS_PRODUCT_NAME"], "Nutrition Research Corpus Research Atlas")
-        self.assertIn("queue", env["ATLAS_QUEUE_PATH"])
-        self.assertIn("acquisition", env["ATLAS_ACQUISITION_PATH"])
+        self.assertEqual(env["ATLAS_PRODUCT_NAME"], "Nutrition Research Atlas")
+        self.assertEqual(env["CORPUS_QUEUE_PATH"], "discovery/domain-v1/latest.json")
+        self.assertEqual(env["CORPUS_ACQUISITION_PATH"], "acquisition/latest.json")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertEqual(config["port"], 54321)
+
+    def test_resume_live_root_uses_explicit_canonical_corpus_root(self):
+        canonical = self.run_root / "canonical-corpora" / "nutrition"
+        config = build_atlas_launch_config(
+            run_root=self.run_root / "state", domain="nutrition",
+            title="Nutrition Research Corpus", port=54321,
+            corpus_root=canonical,
+        )
+        self.assertEqual(config["env"]["CORPUS_ROOT"], str(canonical))
+        self.assertEqual(
+            config["env"]["CORPUS_INTAKE_ROOT"],
+            str(self.run_root / "state" / ".corpus-start" / "atlas-intake"),
+        )
 
     def test_no_embedded_secret(self):
         config = build_atlas_launch_config(
@@ -113,7 +128,7 @@ class InstantiateAtlasTest(unittest.TestCase):
 
     def test_healthy_launch_returns_receipt_and_stops(self):
         handle = _FakeHandle()
-        probe = _make_probe(index={"product_name": "Nutrition Research Corpus Research Atlas", "domain": "nutrition"})
+        probe = _make_probe(index={"product": {"name": "Nutrition Research Atlas"}})
         receipt = instantiate_atlas(
             self.config, launcher=lambda cfg: handle, probe=probe,
         )
@@ -127,7 +142,7 @@ class InstantiateAtlasTest(unittest.TestCase):
 
     def test_keep_running_when_stop_false(self):
         handle = _FakeHandle()
-        probe = _make_probe(index={"product_name": "Nutrition Research Corpus Research Atlas", "domain": "nutrition"})
+        probe = _make_probe(index={"product": {"name": "Nutrition Research Atlas"}})
         instantiate_atlas(self.config, launcher=lambda cfg: handle, probe=probe, stop=False)
         self.assertFalse(handle.stopped)
 

@@ -18,6 +18,7 @@ and the path is fully deterministic. Credentials never appear in a query URL.
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from urllib.parse import quote_plus, urlsplit
 
@@ -25,6 +26,8 @@ from corpus_engine_models import CandidateObservation
 from corpus_rights_resolver import RightsEvidence
 
 DEFAULT_WORKS_ENDPOINT = "https://api.openalex.org/works"
+DEFAULT_EUROPEPMC_ENDPOINT = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+DEFAULT_NCBI_OA_ENDPOINT = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
 # OpenAlex open-access statuses whose best location carries a redistributable
 # license. "bronze" (free to read, no license) and "closed" never qualify.
 _LICENSED_OA_STATUSES = frozenset({"gold", "hybrid", "green"})
@@ -301,4 +304,90 @@ def discover_scholarly(
                     },
                 )
             )
+    return candidates
+
+
+def discover_europepmc(
+    *,
+    domain: str,
+    topics: list[str],
+    http_get,
+    fetched_at,
+    endpoint: str = DEFAULT_EUROPEPMC_ENDPOINT,
+    oa_endpoint: str = DEFAULT_NCBI_OA_ENDPOINT,
+    max_candidates: int = 8,
+    timeout_seconds: float = 30.0,
+) -> list[ScholarlyCandidate]:
+    """Independent public fallback when OpenAlex is throttled or unavailable.
+
+    Europe PMC supplies the topic search and PMCID.  NCBI's OA service supplies
+    the explicit license; only compatible licenses receive a content locator.
+    """
+    if not topics:
+        raise ScholarlyDiscoveryError("topics must be a non-empty list")
+    query = quote_plus(f"{domain.replace('-', ' ')} AND OPEN_ACCESS:Y AND IN_EPMC:Y")
+    url = f"{endpoint}?query={query}&format=json&pageSize={max_candidates}&resultType=core"
+    response = http_get(url, timeout_seconds)
+    try:
+        document = json.loads(response.content)
+        rows = document["resultList"]["result"]
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise ScholarlyDiscoveryError(f"invalid Europe PMC response: {exc}") from exc
+    if not isinstance(rows, list):
+        raise ScholarlyDiscoveryError("Europe PMC response must contain a result list")
+
+    when = fetched_at()
+    candidates: list[ScholarlyCandidate] = []
+    for row in rows:
+        if len(candidates) >= max_candidates or not isinstance(row, dict):
+            break
+        pmcid = row.get("pmcid")
+        if not isinstance(pmcid, str) or not pmcid.upper().startswith("PMC"):
+            continue
+        pmcid = pmcid.upper()
+        license_url = f"{oa_endpoint}?id={quote_plus(pmcid)}"
+        try:
+            license_response = http_get(license_url, timeout_seconds)
+            root = ET.fromstring(license_response.content)
+            record = root.find(".//record")
+        except (ET.ParseError, AttributeError, ValueError):
+            continue
+        raw_license = record.get("license") if record is not None else None
+        normalized = raw_license.strip().lower().replace(" ", "-") if isinstance(raw_license, str) else ""
+        if normalized not in _COMPATIBLE_LICENSES:
+            continue
+        title = str(row.get("title") or pmcid)
+        canonical = f"https://europepmc.org/article/PMC/{pmcid}"
+        locator = f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/"
+        observation = CandidateObservation.create(
+            domain=domain,
+            entity_type="paper",
+            canonical_url=canonical,
+            discovery_source=f"scholarly_discovery:europepmc:{pmcid}",
+            evidence_pointer=locator,
+            evidence_lane="primary-study",
+            topics=_matched_topics(title, topics),
+            observed_at=when,
+        )
+        candidates.append(
+            ScholarlyCandidate(
+                observation=observation,
+                rights_evidence=RightsEvidence(
+                    license=normalized,
+                    access_class="open_content",
+                    repository="europepmc",
+                    is_publicly_visible=True,
+                    site_license_grant=False,
+                ),
+                openalex_id=pmcid,
+                title=title,
+                content_locator=locator,
+                metadata={
+                    "pmcid": pmcid,
+                    "doi": row.get("doi"),
+                    "publication_date": row.get("firstPublicationDate"),
+                    "source": "europepmc",
+                },
+            )
+        )
     return candidates

@@ -61,7 +61,7 @@ from corpus_priority import CandidateTask, PriorityPolicy
 # into sys.modules, so a direct import here could bind a different class object.
 CandidateRecord = corpus_priority.CandidateRecord
 from corpus_rights_resolver import resolve_rights
-from corpus_scholarly_discovery import discover_scholarly
+from corpus_scholarly_discovery import discover_europepmc, discover_scholarly
 from corpus_seed_loader import load_candidate_seed
 
 DEFAULT_CONFIG_DIR = _REPO_ROOT / "config" / "domains"
@@ -316,7 +316,20 @@ def _default_discover(fetched_at, *, max_bytes=DEFAULT_MAX_BYTES):
         return _DiscoveryResponse(content=fetched.body, url=fetched.final_url)
 
     def discover(domain, topics):
-        return discover_scholarly(domain=domain, topics=topics, http_get=http_get, fetched_at=fetched_at)
+        try:
+            candidates = discover_scholarly(
+                domain=domain, topics=topics, http_get=http_get, fetched_at=fetched_at
+            )
+            if candidates:
+                return candidates
+        except Exception:
+            # Independent public fallback: Europe PMC search plus NCBI's OA
+            # license service. This keeps a topic start moving when OpenAlex is
+            # throttled without weakening the rights gate.
+            pass
+        return discover_europepmc(
+            domain=domain, topics=topics, http_get=http_get, fetched_at=fetched_at
+        )
 
     return discover
 

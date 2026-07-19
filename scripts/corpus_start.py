@@ -28,6 +28,7 @@ _SRC = _REPO_ROOT / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
+from corpus_bootstrap_packet import build_topic_bootstrap_packet  # noqa: E402
 from corpus_start import CorpusStartRun, StartBoundaries, StartOrchestrationError  # noqa: E402
 from corpus_start_state import StartRunError  # noqa: E402
 
@@ -47,6 +48,14 @@ def _emit(payload: dict, *, as_json: bool) -> None:
 def main(argv: list[str] | None = None, *, boundaries: StartBoundaries | None = None, now: str | None = None) -> int:
     parser = argparse.ArgumentParser(prog="corpus-start", description=__doc__)
     sub = parser.add_subparsers(dest="verb", required=True)
+
+    p_start = sub.add_parser("start", help="topic-only end-to-end corpus start")
+    p_start.add_argument("--topic", required=True)
+    p_start.add_argument("--run-root", required=True)
+    p_start.add_argument(
+        "--resume-live-root",
+        help="use an existing corpora base instead of an isolated clean root",
+    )
 
     p_begin = sub.add_parser("begin", help="create the phase ledger for a topic")
     p_begin.add_argument("--topic", required=True)
@@ -71,11 +80,32 @@ def main(argv: list[str] | None = None, *, boundaries: StartBoundaries | None = 
     now = now or _utc_now()
 
     try:
+        if args.verb == "start":
+            clean_root = args.resume_live_root is None
+            run = CorpusStartRun.begin(
+                args.run_root, topic=args.topic, now=now,
+                clean_root=clean_root, corpora_base=args.resume_live_root,
+                boundaries=boundaries,
+            )
+            if run.status()["status"] == "initialized":
+                packet_path = Path(args.run_root) / ".corpus-start" / "auto-bootstrap-packet.json"
+                packet_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                packet_path.write_text(
+                    json.dumps(build_topic_bootstrap_packet(args.topic), indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                run.apply_packet(packet_path, now=now)
+            if run.status()["status"] != "complete":
+                run.continue_run(now=now)
+            _emit(run.status(), as_json=True)
+            return 0
+
         if args.verb == "begin":
             clean_root = args.resume_live_root is None
             run = CorpusStartRun.begin(
                 args.run_root, topic=args.topic, now=now,
-                clean_root=clean_root, boundaries=boundaries,
+                clean_root=clean_root, corpora_base=args.resume_live_root,
+                boundaries=boundaries,
             )
             _emit(
                 {

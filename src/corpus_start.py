@@ -92,9 +92,13 @@ class CorpusStartRun:
         topic: str,
         now: str,
         clean_root: bool = True,
+        corpora_base: Path | str | None = None,
         boundaries: StartBoundaries | None = None,
     ) -> "CorpusStartRun":
-        state = StartRunState.begin(run_root, topic=topic, now=now, clean_root=clean_root)
+        state = StartRunState.begin(
+            run_root, topic=topic, now=now, clean_root=clean_root,
+            corpora_base=corpora_base,
+        )
         return cls(state, boundaries=boundaries or default_boundaries())
 
     @classmethod
@@ -212,7 +216,7 @@ class CorpusStartRun:
         if not domain:
             raise StartOrchestrationError("run has no bound domain; apply a packet first")
         spec = load_domain_spec(self._spec_path(domain))
-        corpora_base = self.run_root / "corpora"
+        corpora_base = self._state.corpora_base or (self.run_root / "corpora")
         corpus_root = corpora_base / spec.roots["corpus_root"]
         state_root = corpora_base / spec.roots["state_root"]
         output_root = corpora_base / spec.roots["output_root"]
@@ -294,7 +298,10 @@ class CorpusStartRun:
 
     def _do_complete(self, ctx: PhaseContext) -> dict[str, Any]:
         self._state.assert_completable()
-        if self._detect_manual_substitution(ctx.corpus_root):
+        # A clean proof must prove that every source page was admitted by the
+        # orchestrator.  Resume-live runs intentionally start with authored
+        # pages, so the same check would reject the corpus they are resuming.
+        if ctx.clean_root and self._detect_manual_substitution(ctx.corpus_root):
             raise StartOrchestrationError(
                 "manual source pages exist outside the orchestrator receipt set"
             )
@@ -338,8 +345,10 @@ class CorpusStartRun:
         manual = False
         domain = self._state.domain
         if domain:
-            corpus_root = self.run_root / "corpora" / domain
-            manual = self._detect_manual_substitution(corpus_root)
+            spec = load_domain_spec(self._spec_path(domain))
+            corpora_base = self._state.corpora_base or (self.run_root / "corpora")
+            corpus_root = corpora_base / spec.roots["corpus_root"]
+            manual = self._detect_manual_substitution(corpus_root) if self._state.clean_root else False
 
         return {
             "status": self._state.phase,
@@ -360,34 +369,8 @@ class CorpusStartRun:
 # --------------------------------------------------------------------------
 
 def default_boundaries() -> StartBoundaries:
-    """Real, live-service boundaries for production runs.
-
-    Not exercised by the deterministic test suite (which injects fakes). These
-    adapters fail loudly rather than fabricate success when a live prerequisite
-    is missing, honoring the "no claims beyond current bytes" rule.
-    """
-    return StartBoundaries(
-        acquire=_unconfigured("acquisition"),
-        verify_gbrain=_unconfigured("gbrain"),
-        verify_atlas=_default_atlas_boundary,
-        verify_scheduler=_unconfigured("scheduler"),
-    )
-
-
-def _unconfigured(name: str) -> Callable[[PhaseContext], dict[str, Any]]:
-    def _boundary(ctx: PhaseContext) -> dict[str, Any]:
-        raise StartOrchestrationError(
-            f"no live {name} boundary configured; inject one via StartBoundaries"
-        )
-
-    return _boundary
-
-
-def _default_atlas_boundary(ctx: PhaseContext) -> dict[str, Any]:
-    # Lazy import keeps the orchestrator importable without the adapter's deps.
-    from corpus_atlas_adapter import build_atlas_launch_config, instantiate_atlas
-
-    config = build_atlas_launch_config(
-        run_root=ctx.run_root, domain=ctx.domain, title=ctx.title,
-    )
-    return instantiate_atlas(config)
+    """Return the real runtime adapters for acquisition, GBrain, Atlas, and scheduler."""
+    # Lazy import keeps the deterministic core side-effect free in unit tests
+    # and avoids the live module's intentional import of PhaseContext.
+    from corpus_start_live import make_live_boundaries
+    return make_live_boundaries()

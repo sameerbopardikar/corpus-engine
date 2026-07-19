@@ -2,6 +2,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -9,7 +10,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from corpus_adapters.types import RightsState
-from corpus_scholarly_discovery import ScholarlyCandidate, discover_scholarly
+from corpus_scholarly_discovery import ScholarlyCandidate, discover_europepmc, discover_scholarly
 
 
 class _FakeResponse:
@@ -303,6 +304,54 @@ class DiscoveryTests(unittest.TestCase):
             max_candidates=1,
         )
         self.assertEqual(len(candidates), 1)
+
+    def test_europepmc_fallback_uses_topic_search_and_ncbi_oa_license(self):
+        calls = []
+
+        def fixture(url, timeout):
+            calls.append(url)
+            if "europepmc" in url:
+                return _FakeResponse(
+                    {
+                        "resultList": {
+                            "result": [
+                                {
+                                    "pmcid": "PMC1234567",
+                                    "title": "Dietary protein and nutrition outcomes",
+                                    "doi": "10.1/nutrition",
+                                    "firstPublicationDate": "2025-01-02",
+                                },
+                                {
+                                    "pmcid": "PMC7654321",
+                                    "title": "Unlicensed nutrition record",
+                                },
+                            ]
+                        }
+                    },
+                    url,
+                )
+            license_value = "CC BY" if "PMC1234567" in url else "commercial"
+            return SimpleNamespace(
+                content=(
+                    f'<OA><records><record id="x" license="{license_value}" /></records></OA>'
+                ).encode("utf-8"),
+                url=url,
+            )
+
+        candidates = discover_europepmc(
+            domain="nutrition", topics=["nutrition-foundations"],
+            http_get=fixture, fetched_at=lambda: "2026-07-19T00:00:00Z",
+        )
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.openalex_id, "PMC1234567")
+        self.assertEqual(candidate.rights_evidence.license, "cc-by")
+        self.assertEqual(
+            candidate.content_locator,
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC1234567/",
+        )
+        self.assertIn("nutrition+AND+OPEN_ACCESS", calls[0])
+        self.assertTrue(any("oa.fcgi?id=PMC1234567" in url for url in calls))
 
 
 if __name__ == "__main__":

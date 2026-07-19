@@ -240,6 +240,46 @@ def _validate_existing_refs(raw: Any, *, clean: bool) -> list[str]:
     return [_text(ref, "existing_context_ref") for ref in raw]
 
 
+def build_topic_bootstrap_packet(topic: str) -> dict[str, Any]:
+    """Build the domain-agnostic packet used by the one-command start path.
+
+    Candidate locators are public discovery systems, not authored evidence.
+    The acquisition phase still performs live topic-specific discovery and
+    admits only rights-clear retrieved sources.
+    """
+    topic = _text(topic, "topic")
+    domain = _slugify(topic, "corpus")
+    display = " ".join(word.capitalize() for word in re.split(r"[-_\s]+", topic) if word)
+    packet = {
+        "schema_version": PACKET_SCHEMA_VERSION,
+        "topic_input": topic,
+        "domain": domain,
+        "title": f"{display} Research Corpus",
+        "objective": f"Build an evidence-ranked, continuously improving private corpus on {topic}.",
+        "axes": [
+            {"key": "foundations", "title": "Foundations and mechanisms", "topics": [f"{domain}-foundations", f"{domain}-mechanisms"]},
+            {"key": "evidence", "title": "Evidence and outcomes", "topics": [f"{domain}-interventions", f"{domain}-outcomes"]},
+            {"key": "practice", "title": "Practice, risks, and implementation", "topics": [f"{domain}-practice", f"{domain}-risks"]},
+        ],
+        "evidence_lanes": {"default": 1.0, "scholarly": 1.2, "institutional": 1.1},
+        "source_families": [
+            {"family": "scholarly-open-access", "acquisition_mode": "public_open_access_fetch"},
+            {"family": "public-institutions", "acquisition_mode": "public_metadata_capture"},
+        ],
+        "candidate_locators": [
+            {"url": "https://openalex.org/", "title": "OpenAlex discovery index", "topics": [f"{domain}-foundations"]},
+            {"url": "https://europepmc.org/", "title": "Europe PMC open literature", "topics": [f"{domain}-evidence"]},
+            {"url": "https://pubmed.ncbi.nlm.nih.gov/", "title": "PubMed research index", "topics": [f"{domain}-outcomes"]},
+        ],
+        "scout_provenance": [
+            {"query": f"{topic} open access research evidence", "result_url": "https://openalex.org/"},
+            {"query": f"{topic} systematic review public full text", "result_url": "https://europepmc.org/"},
+        ],
+        "existing_context_refs": [],
+    }
+    return validate_bootstrap_packet(packet, clean=True)
+
+
 # --------------------------------------------------------------------------
 # Compilation
 # --------------------------------------------------------------------------
