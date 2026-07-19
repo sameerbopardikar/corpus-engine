@@ -72,6 +72,40 @@ extractor gate; everything else stays metadata-only or unclear. Idempotency is
 bound to domain + candidate identity + source revision, so re-running unchanged
 discovery on a later day refetches and rewrites nothing.
 
+## Start a corpus from a topic — `corpus-start`
+
+`start a corpus on <topic>` routes to one deterministic, resumable orchestrator
+(`scripts/corpus_start.py`) instead of ad-hoc manual seeding. The orchestrator
+owns a phase ledger and can never report success until it has produced a field
+map, acquired at least one source, and verified GBrain retrieval, Atlas
+health/readiness, and scheduler uniqueness.
+
+```bash
+corpus-start begin        --topic Nutrition --run-root /tmp/nutrition-proof
+corpus-start apply-packet --run /tmp/nutrition-proof --packet /tmp/nutrition-packet.json
+corpus-start continue     --run /tmp/nutrition-proof
+corpus-start status       --run /tmp/nutrition-proof --json
+```
+
+- `begin` only creates `<run-root>/.corpus-start/run.json` and asks for a
+  strict topic-only bootstrap packet (see
+  `tests/fixtures/nutrition-bootstrap-packet.json`).
+- `apply-packet` validates the packet (clean mode rejects any
+  `existing_context_refs`) and compiles a generic `DomainSpec` + candidate seed
+  inside the run root — it can never hand-author corpus pages.
+- `continue` runs bootstrap → field map → acquisition → GBrain → Atlas →
+  scheduler in a resumable, physically idempotent phase order.
+- `status --json` is the sole completion authority. `status=complete` is
+  impossible without every required receipt, one acquired source, a healthy
+  Atlas, a unique scheduler owner, and no manual seed substitution.
+
+Acquisition, GBrain, Atlas, and scheduler are injected boundaries so the
+orchestration is fully test-deterministic; `src/corpus_atlas_adapter.py` reuses
+the existing environment-configurable Atlas release (`CORPUS_ROOT`,
+`ATLAS_PRODUCT_NAME`) rather than building another frontend. Use
+`--resume-live-root /root/corpora` to resume a non-clean existing namespace
+(clearly labeled `clean_root=false`).
+
 ## Baseline
 
 ```bash
