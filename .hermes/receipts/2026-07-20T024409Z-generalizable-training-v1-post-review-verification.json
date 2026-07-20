@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "receipt_type": "generalizable-training-v1-release-candidate",
-  "status": "verified_code_baseline",
+  "receipt_type": "generalizable-training-v1-post-review-remediation-verification",
+  "status": "verified_remediation_code_baseline",
   "recorded_at": "2026-07-20T02:44:09Z",
-  "updated_at": "2026-07-20T03:18:27Z",
+  "updated_at": "2026-07-20T03:28:21Z",
   "repository": "sameerbopardikar/corpus-engine",
   "branch": "agent/generalizable-training-v1",
-  "verified_code_commit": "a631eb382c9bd90febcb3c066418b8435540927e",
-  "verified_tree": "6520223f6d9cef17dcf96b0796867768810a76e1",
-  "parent_commit": "04a4d453e9c149eded7e8db4cf7cf54c83ea1a20",
+  "verified_code_commit": "5adfa74552500e0377dd7e63b0c19196fb885520",
+  "verified_tree": "d81cdf7b899d5d11e5b78f9c47582d6ae93f8d48",
+  "parent_commit": "53203a96afe8637f22810caee27dca85222a5700",
   "verification_scope": {
     "code": true,
     "configuration": true,
@@ -25,7 +25,7 @@
     },
     "full_suite": {
       "command": "python3 -m unittest discover -s tests -v",
-      "tests_run": 605,
+      "tests_run": 606,
       "result": "passed"
     },
     "final_review_regressions": {
@@ -35,7 +35,7 @@
     },
     "loader_integrity_regressions": {
       "command": "python3 -m unittest -v tests.test_global_cycle_acquisition",
-      "tests_run": 14,
+      "tests_run": 15,
       "result": "passed"
     },
     "compile": {
@@ -64,6 +64,7 @@
     "coderabbit_second_wave": "remediated in b906fc1ef9a338a13c5c9e814017dc16f9d08e85",
     "coderabbit_final_runtime_findings": "remediated in 668c84835d96938deec2ba9cd4f7e88c7709032b",
     "coderabbit_loader_integrity_finding": "remediated in a631eb382c9bd90febcb3c066418b8435540927e",
+    "coderabbit_planned_domain_integrity_finding": "remediated in 5adfa74552500e0377dd7e63b0c19196fb885520",
     "prompt_injection_comment": "verified_false_positive_due_to_prohibited_behavior_variant_check",
     "independent_p1_ledger": "superseded_with_historical_provenance_preserved"
   },
@@ -72,5 +73,5 @@
     "verified_commit": "f426861b31a86d1804eab2703c3b5a20c3425f37",
     "relationship": "historical_predecessor_only_not_current_release_proof"
   },
-  "release_binding_note": "This receipt binds the exact tested code/config/schema tree at a631eb382c9bd90febcb3c066418b8435540927e. The documentation-inclusive working tree is retested before its evidence commit; the exact merged commit and release tag are verified externally through GitHub after merge."
+  "verification_binding_note": "This post-review receipt binds the exact tested remediation code/config/schema tree at 5adfa74552500e0377dd7e63b0c19196fb885520. It does not replace the original frozen V1 proof or claim to be the final merged release tag."
 }
