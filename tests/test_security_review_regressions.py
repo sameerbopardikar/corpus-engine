@@ -114,14 +114,24 @@ class DefusedXmlRegressionTests(unittest.TestCase):
 
 class FileDescriptorRegressionTests(unittest.TestCase):
     def test_lock_descriptor_closes_when_fchmod_fails(self):
-        with tempfile.TemporaryDirectory() as td:
-            runner = AdapterRunner(Path(td) / "state.json")
-            before = len(os.listdir("/proc/self/fd"))
-            with mock.patch.object(adapter_base.os, "fchmod", side_effect=OSError("denied")):
-                with self.assertRaisesRegex(OSError, "denied"):
-                    runner._commit(object())  # type: ignore[arg-type]
-            after = len(os.listdir("/proc/self/fd"))
-            self.assertEqual(after, before)
+        runner = AdapterRunner(Path(tempfile.mkdtemp()) / "state.json")
+        real_open = os.open
+        opened_fds = []
+
+        def capture_open(*args, **kwargs):
+            fd = real_open(*args, **kwargs)
+            opened_fds.append(fd)
+            return fd
+
+        with (
+            mock.patch.object(adapter_base.os, "open", side_effect=capture_open),
+            mock.patch.object(adapter_base.os, "fchmod", side_effect=OSError("denied")),
+        ):
+            with self.assertRaisesRegex(OSError, "denied"):
+                runner._commit(object())  # type: ignore[arg-type]
+        self.assertEqual(len(opened_fds), 1)
+        with self.assertRaises(OSError):
+            os.fstat(opened_fds[0])
 
 
 class IntegrityRegressionTests(unittest.TestCase):
@@ -132,13 +142,27 @@ class IntegrityRegressionTests(unittest.TestCase):
 
     def test_policy_projection_and_seed_lanes_cannot_drift(self):
         policy = json.loads((ROOT / "config" / "agentic-engineering-policy.json").read_text())
-        domain = json.loads((ROOT / "config" / "domains" / "agentic-engineering.json").read_text())
-        self.assertEqual(policy["evidence_lane_weights"], domain["evidence_lanes"])
+        agentic = json.loads((ROOT / "config" / "domains" / "agentic-engineering.json").read_text())
+        self.assertEqual(policy["evidence_lane_weights"], agentic["evidence_lanes"])
 
-        training = json.loads((ROOT / "config" / "domains" / "training.json").read_text())
-        seeds = json.loads((ROOT / "docs" / "source-maps" / "training-seed-candidates.json").read_text())
-        for candidate in seeds["candidates"]:
-            self.assertIn(candidate["evidence_lane"], training["evidence_lanes"], candidate["id"])
+        for domain_name in ("training", "agentic-engineering"):
+            with self.subTest(domain=domain_name):
+                domain = json.loads((ROOT / "config" / "domains" / f"{domain_name}.json").read_text())
+                profile = json.loads((ROOT / "config" / "profiles" / f"{domain_name}-default.json").read_text())
+                seeds = json.loads((ROOT / "docs" / "source-maps" / f"{domain_name}-seed-candidates.json").read_text())
+                domain_lanes = set(domain["evidence_lanes"])
+                profile_lanes = set(profile["applicability"]["evidence_lanes_allow"])
+                for candidate in seeds["candidates"]:
+                    self.assertIn(candidate["evidence_lane"], domain_lanes, candidate["id"])
+                    self.assertIn(candidate["evidence_lane"], profile_lanes, candidate["id"])
+
+    def test_broad_source_family_identity_never_grants_shared_rights(self):
+        domain = json.loads((ROOT / "config" / "domains" / "agentic-engineering.json").read_text())
+        families = {item["family"]: item for item in domain["source_families"]}
+        for name in ("peer-reviewed-literature", "open-source-repository"):
+            with self.subTest(family=name):
+                self.assertEqual(families[name]["rights_state"], "rights_unclear")
+                self.assertFalse(families[name]["shared_corpus_eligible"])
 
     def test_post_publication_failure_removes_card_and_evaluation(self):
         with tempfile.TemporaryDirectory() as td:

@@ -28,8 +28,8 @@ PACKET_SCHEMA_VERSION = 1
 # every floor; these are the minimum, not the target.
 MIN_AXES = 2
 MIN_TOPICS_TOTAL = 4
-MIN_SOURCE_FAMILIES = 2
-MIN_CANDIDATE_LOCATORS = 3
+MIN_SOURCE_FAMILIES = 3
+MIN_CANDIDATE_LOCATORS = 5
 
 _PACKET_FIELDS = {
     "schema_version", "topic_input", "domain", "title", "objective", "axes",
@@ -265,11 +265,14 @@ def build_topic_bootstrap_packet(topic: str) -> dict[str, Any]:
         "source_families": [
             {"family": "scholarly-open-access", "acquisition_mode": "public_open_access_fetch"},
             {"family": "public-institutions", "acquisition_mode": "public_metadata_capture"},
+            {"family": "research-registries", "acquisition_mode": "public_metadata_capture"},
         ],
         "candidate_locators": [
             {"url": "https://openalex.org/", "title": "OpenAlex discovery index", "topics": [f"{domain}-foundations"]},
             {"url": "https://europepmc.org/", "title": "Europe PMC open literature", "topics": [f"{domain}-evidence"]},
             {"url": "https://pubmed.ncbi.nlm.nih.gov/", "title": "PubMed research index", "topics": [f"{domain}-outcomes"]},
+            {"url": "https://api.crossref.org/", "title": "Crossref scholarly registry", "topics": [f"{domain}-evidence"]},
+            {"url": "https://www.semanticscholar.org/", "title": "Semantic Scholar discovery index", "topics": [f"{domain}-practice"]},
         ],
         "scout_provenance": [
             {"query": f"{topic} open access research evidence", "result_url": "https://openalex.org/"},

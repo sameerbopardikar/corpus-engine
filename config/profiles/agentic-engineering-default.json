@@ -16,7 +16,10 @@
     "evidence_lanes_allow": [
       "scientific-evaluation",
       "security-evaluation",
+      "security-incident",
       "production-reliability",
+      "production-deployment",
+      "foundational",
       "production-architecture",
       "implementation-research",
       "practitioner-implementation"

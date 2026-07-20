@@ -207,9 +207,17 @@ def parse_feedback_profile(data: Any) -> FeedbackProfile:
     export_scope = _text(privacy_raw["export_scope"], "privacy.export_scope")
     if export_scope not in _EXPORT_SCOPES:
         raise FeedbackProfileError(f"unknown privacy.export_scope: {export_scope!r}")
+    forbid_private_export = _bool(
+        privacy_raw["forbid_private_outcome_export"],
+        "privacy.forbid_private_outcome_export",
+    )
+    if export_scope == "shared" and not forbid_private_export:
+        raise FeedbackProfileError(
+            "shared export_scope requires forbid_private_outcome_export=true"
+        )
     privacy = {
         "export_scope": export_scope,
-        "forbid_private_outcome_export": _bool(privacy_raw["forbid_private_outcome_export"], "privacy.forbid_private_outcome_export"),
+        "forbid_private_outcome_export": forbid_private_export,
     }
 
     min_evidence_raw = _exact(fields["min_evidence"], _MIN_EVIDENCE_FIELDS, "min_evidence")

@@ -32,7 +32,10 @@ _PRIVATE_RIGHTS = {"private_authorized"}
 _POLICY_EVIDENCE_LANES = {
     "scientific-evaluation",
     "security-evaluation",
+    "security-incident",
     "production-reliability",
+    "production-deployment",
+    "foundational",
     "production-architecture",
     "implementation-research",
     "practitioner-implementation",
@@ -180,7 +183,10 @@ class PriorityPolicy:
             evidence_lane_weights={
                 "scientific-evaluation": 1.15,
                 "security-evaluation": 1.12,
+                "security-incident": 1.12,
                 "production-reliability": 1.10,
+                "production-deployment": 1.10,
+                "foundational": 1.10,
                 "production-architecture": 1.05,
                 "implementation-research": 1.00,
                 "practitioner-implementation": 0.95,

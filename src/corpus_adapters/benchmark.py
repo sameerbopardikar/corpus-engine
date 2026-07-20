@@ -49,7 +49,7 @@ class BenchmarkAdapter(SourceAdapter):
             if not isinstance(result_id, str) or not result_id or result_id in seen:
                 raise ValueError("benchmark result id must be unique and non-blank")
             seen.add(result_id)
-            corrected = "correct" in result_id.lower() or "correct" in str(result.get("title", "")).lower() or "fork" in str(result.get("title", "")).lower()
+            corrected = bool(result.get("corrected_from")) or result.get("is_corrected_fork") is True
             if corrected and not result.get("corrected_from"):
                 raise ValueError("corrected benchmark fork must include corrected_from")
             if result.get("corrected_from") and result["corrected_from"] not in {item.get("id") for item in results}:

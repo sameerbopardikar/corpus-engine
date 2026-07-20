@@ -1,5 +1,6 @@
 import sys
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -196,7 +197,7 @@ class ValidationTests(unittest.TestCase):
     def test_resolution_is_frozen(self):
         resolution = resolve_rights(_evidence(license="cc-by", access_class="open_content"))
         self.assertIsInstance(resolution, RightsResolution)
-        with self.assertRaises(Exception):
+        with self.assertRaises(FrozenInstanceError):
             resolution.basis = "mutated"
 
 

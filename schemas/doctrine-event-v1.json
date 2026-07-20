@@ -23,15 +23,30 @@
     "command_id": {"type": "string", "minLength": 1},
     "command_digest": {"$ref": "#/$defs/sha256"},
     "event_type": {
-      "enum": ["propose", "add_alias", "merge", "split", "revise", "bound", "supersede", "deprecate", "reject", "restore"]
+      "enum": ["propose", "add_alias", "merge", "split", "revise", "bound", "supersede", "deprecate", "reject", "restore", "adopt"]
     },
     "recorded_at": {"type": "string", "format": "date-time"},
     "previous_digest": {"$ref": "#/$defs/sha256"},
     "payload": {"type": "object"},
     "event_digest": {"$ref": "#/$defs/sha256"}
   },
+  "allOf": [
+    {"if": {"properties": {"event_type": {"const": "propose"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/propose_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "add_alias"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/add_alias_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "merge"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/merge_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "split"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/split_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "revise"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/revise_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "bound"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/bound_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "supersede"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/supersede_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "deprecate"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/deprecate_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "reject"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/reject_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "restore"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/restore_payload"}}}},
+    {"if": {"properties": {"event_type": {"const": "adopt"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/adopt_payload"}}}}
+  ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "text": {"type": "string", "minLength": 1},
+    "key": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
     "citation": {
       "type": "object",
       "additionalProperties": false,
@@ -42,6 +57,128 @@
         "locator": {"type": "string", "minLength": 1},
         "claim_sha256": {"$ref": "#/$defs/sha256"},
         "evidence_class": {"type": "string", "minLength": 1}
+      }
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/citation"}
+    },
+    "child": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concept_key", "title", "statement", "aliases"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"},
+        "title": {"$ref": "#/$defs/text"},
+        "statement": {"$ref": "#/$defs/text"},
+        "aliases": {"type": "array", "items": {"$ref": "#/$defs/key"}}
+      }
+    },
+    "adoption_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_id", "authorized_by", "granted_at"],
+      "properties": {
+        "receipt_id": {"$ref": "#/$defs/text"},
+        "authorized_by": {"$ref": "#/$defs/text"},
+        "granted_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "propose_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "title", "statement", "citations", "rationale"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "title": {"$ref": "#/$defs/text"},
+        "statement": {"$ref": "#/$defs/text"}, "citations": {"$ref": "#/$defs/citations"},
+        "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "add_alias_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "alias", "rationale"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "alias": {"$ref": "#/$defs/key"},
+        "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "merge_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_keys", "target_key", "title", "statement", "citations", "rationale"],
+      "properties": {
+        "source_keys": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/key"}},
+        "target_key": {"$ref": "#/$defs/key"}, "title": {"$ref": "#/$defs/text"},
+        "statement": {"$ref": "#/$defs/text"}, "citations": {"$ref": "#/$defs/citations"},
+        "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "split_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_key", "children", "primary_key", "citations", "rationale"],
+      "properties": {
+        "source_key": {"$ref": "#/$defs/key"},
+        "children": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/child"}},
+        "primary_key": {"$ref": "#/$defs/key"}, "citations": {"$ref": "#/$defs/citations"},
+        "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "revise_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "statement", "citations", "rationale", "contradictory"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "statement": {"$ref": "#/$defs/text"},
+        "citations": {"$ref": "#/$defs/citations"}, "rationale": {"$ref": "#/$defs/text"},
+        "contradictory": {"type": "boolean"}
+      }
+    },
+    "bound_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "statement", "citations", "rationale"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "statement": {"$ref": "#/$defs/text"},
+        "citations": {"$ref": "#/$defs/citations"}, "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "supersede_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_key", "target_key", "title", "statement", "citations", "rationale"],
+      "properties": {
+        "source_key": {"$ref": "#/$defs/key"}, "target_key": {"$ref": "#/$defs/key"},
+        "title": {"$ref": "#/$defs/text"}, "statement": {"$ref": "#/$defs/text"},
+        "citations": {"$ref": "#/$defs/citations"}, "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "deprecate_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "citations", "rationale"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "citations": {"$ref": "#/$defs/citations"},
+        "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "reject_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["proposal_key", "citations", "rationale"],
+      "properties": {
+        "proposal_key": {"$ref": "#/$defs/key"}, "citations": {"$ref": "#/$defs/citations"},
+        "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "restore_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "version", "citations", "rationale"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "version": {"type": "integer", "minimum": 1},
+        "citations": {"$ref": "#/$defs/citations"}, "rationale": {"$ref": "#/$defs/text"}
+      }
+    },
+    "adopt_payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["concept_key", "holder_id", "adoption_receipt", "citations", "rationale"],
+      "properties": {
+        "concept_key": {"$ref": "#/$defs/key"}, "holder_id": {"$ref": "#/$defs/text"},
+        "adoption_receipt": {"$ref": "#/$defs/adoption_receipt"},
+        "citations": {"$ref": "#/$defs/citations"}, "rationale": {"$ref": "#/$defs/text"}
       }
     }
   }

@@ -24,9 +24,14 @@ NOW = "2026-07-19T12:00:00Z"
 class _Recorder:
     """Deterministic, network-free boundary fakes that record invocations."""
 
-    def __init__(self, *, sources_acquired=1, atlas_ready=True, owner_count=1, extra_source=False):
+    def __init__(
+        self, *, sources_acquired=1, sources_discovered=5,
+        source_families=None, atlas_ready=True, owner_count=1, extra_source=False,
+    ):
         self.calls = {"acquire": 0, "gbrain": 0, "atlas": 0, "scheduler": 0}
         self.sources_acquired = sources_acquired
+        self.sources_discovered = sources_discovered
+        self.source_families = source_families or ["family-a", "family-b", "family-c"]
         self.atlas_ready = atlas_ready
         self.owner_count = owner_count
         self.extra_source = extra_source
@@ -44,7 +49,8 @@ class _Recorder:
             # A rogue, non-orchestrator-owned page appears in the corpus.
             (sources_dir / "manual-card.md").write_text("hand written\n", encoding="utf-8")
         return {
-            "sources_discovered": max(self.sources_acquired, 1),
+            "sources_discovered": self.sources_discovered,
+            "source_families_discovered": self.source_families,
             "sources_acquired": self.sources_acquired,
             "owned_sources": owned,
         }
@@ -121,7 +127,8 @@ class CorpusStartTest(unittest.TestCase):
                 "topic_input": "Nutrition",
                 "clean_root": True,
                 "field_map_ready": True,
-                "sources_discovered": 1,
+                "sources_discovered": 5,
+                "source_family_count": 3,
                 "sources_acquired": 1,
                 "gbrain_sync_verified": True,
                 "atlas_ready": True,
@@ -141,6 +148,21 @@ class CorpusStartTest(unittest.TestCase):
         run.continue_run(now="2026-07-19T13:00:00Z")  # a physical retry
         self.assertEqual(rec.calls, calls_after_first)  # boundaries not re-invoked
         self.assertEqual(marker.read_bytes(), before)  # ledger unchanged
+
+    def test_clean_proof_candidate_and_family_minimums_block_completion(self):
+        for rec in (
+            _Recorder(sources_discovered=4),
+            _Recorder(source_families=["family-a", "family-b"]),
+        ):
+            with self.subTest(recorder=rec):
+                run_root = Path(tempfile.mkdtemp(dir=self.run_root))
+                run = CorpusStartRun.begin(
+                    run_root, topic="Nutrition", now=NOW, boundaries=rec.boundaries()
+                )
+                run.apply_packet(FIXTURE, now=NOW)
+                with self.assertRaises(StartOrchestrationError):
+                    run.continue_run(now=NOW)
+                self.assertNotEqual(run.status()["status"], "complete")
 
     def test_zero_acquisition_blocks_completion(self):
         rec = _Recorder(sources_acquired=0)

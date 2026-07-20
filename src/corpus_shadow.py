@@ -300,11 +300,14 @@ def run_shadow_cycle(
         interrupt_after("synced")
 
     doctrine = DoctrineEngine(paths.state_root / "doctrine.jsonl")
-    doctrine_decision = _doctrine_decision(doctrine, package, cycle_id=cycle_id)
+    if "doctrine" in state["phases"]:
+        doctrine_decision = dict(state["phases"]["doctrine"])
+    else:
+        doctrine_decision = _doctrine_decision(doctrine, package, cycle_id=cycle_id)
+        state["phases"]["doctrine"] = doctrine_decision
+        _atomic_write(state_path, state)
     if interrupt_after:
         interrupt_after("doctrine_applied")
-    state["phases"]["doctrine"] = doctrine_decision
-    _atomic_write(state_path, state)
 
     results = [dict(item) for item in retrieve(package)]
     retrieval_cases = [{

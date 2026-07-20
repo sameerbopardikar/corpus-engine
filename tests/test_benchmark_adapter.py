@@ -20,7 +20,7 @@ class Response:
     url = "https://example.org/benchmarks/agentbench/results.json"
     content = json.dumps({"benchmark": "AgentBench", "revision": "2026.07", "results": [
         {"id": "official", "title": "Official leaderboard", "score": 0.72, "unit": "pass_rate", "code_url": "https://github.com/acme/agentbench/tree/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-        {"id": "corrected", "title": "Corrected evaluation fork", "score": 0.61, "unit": "pass_rate", "code_url": "https://github.com/reviewer/agentbench/tree/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "corrected_from": "official"}
+        {"id": "corrected", "title": "Corrected evaluation fork", "score": 0.61, "unit": "pass_rate", "code_url": "https://github.com/reviewer/agentbench/tree/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "is_corrected_fork": True, "corrected_from": "official"}
     ]}).encode()
 
     def json(self):
@@ -55,6 +55,26 @@ class BenchmarkAdapterTests(unittest.TestCase):
             spec = SourceSpec("agentbench", "agentic-engineering", "benchmark", Response.url, "benchmark", RightsState.PUBLIC_RIGHTS_CLEAR)
             batch = AdapterRunner(root / "state.json").run(adapter, spec, InventoryRequest(max_items=1))
             self.assertEqual(batch.source_revision, "2026.07")
+
+    def test_non_correction_substrings_remain_ordinary_results(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            document = {
+                "benchmark": "AgentBench",
+                "revision": "2026.07",
+                "results": [
+                    {"id": "incorrect-baseline", "title": "Ordinary baseline", "score": 0.5},
+                    {"id": "warehouse", "title": "Forklift benchmark", "score": 0.6},
+                ],
+            }
+            response = type("Response", (), {"url": Response.url, "content": json.dumps(document).encode()})()
+            adapter = BenchmarkAdapter(root / "raw", http_get=lambda url, timeout: response, fetched_at=lambda: "2026-07-17T07:00:00Z")
+            spec = SourceSpec("agentbench", "agentic-engineering", "benchmark", Response.url, "benchmark", RightsState.PUBLIC_RIGHTS_CLEAR)
+            batch = AdapterRunner(root / "state.json").run(adapter, spec, InventoryRequest(max_items=2))
+            self.assertEqual(
+                [observation.content_kind for observation in batch.observations],
+                ["benchmark_reported_result", "benchmark_reported_result"],
+            )
 
     def test_fork_without_correction_lineage_fails_closed(self):
         with tempfile.TemporaryDirectory() as td:

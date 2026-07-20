@@ -657,7 +657,7 @@ class AcquisitionExecutor:
             f'rights_state: "{resolution.rights_state.value}"',
             f'rights_basis: "{resolution.basis}"',
             f'evidence_lane: "{candidate.evidence_lane}"',
-            f'candidate_status: "probationary"',
+            'candidate_status: "probationary"',
             f'raw_sha256: "{raw_sha}"',
             f'normalized_sha256: "{normalized_sha}"',
             f'acquired_at: "{self.now()}"',

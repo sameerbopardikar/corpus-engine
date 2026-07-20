@@ -134,10 +134,10 @@ class ScoutImportTests(unittest.TestCase):
         data["fields"][0]["confidence"] = 1.5
         with self.assertRaises(scout_mod.ScoutImportError):
             scout_mod.import_scout_result(self.spec, self._write_scout(data))
-        nan_scout = Path(self.tmpdir.name) / "nan.json"
-        nan_scout.write_text('{"schema_version": 1, "confidence": NaN}')
-        with self.assertRaises(scout_mod.ScoutImportError):
-            scout_mod.import_scout_result(self.spec, nan_scout)
+        nan_data = valid_scout()
+        nan_data["fields"][0]["confidence"] = float("nan")
+        with self.assertRaisesRegex(scout_mod.ScoutImportError, "finite"):
+            scout_mod.import_scout_result(self.spec, self._write_scout(nan_data))
 
     def test_rejects_unknown_rights_hint_and_credential_locator(self):
         bad_rights = valid_scout()

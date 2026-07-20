@@ -100,17 +100,21 @@ def run_global_cycle(
         except Exception as exc:  # fail-soft: one domain cannot corrupt another
             failures.append({"domain": domain, "error": f"{type(exc).__name__}: {exc}"})
             continue
+        staged_tasks: list[CandidateTask] = []
+        staged_ids: set[str] = set()
         for task in tasks:
             if not isinstance(task, CandidateTask):
                 failures.append({"domain": domain, "error": "loader returned a non-CandidateTask"})
                 break
             candidate_id = task.candidate.candidate_id
-            if candidate_id in candidate_domains:
+            if candidate_id in candidate_domains or candidate_id in staged_ids:
                 failures.append({"domain": domain, "error": f"duplicate candidate across domains: {candidate_id}"})
                 break
-            candidate_domains[candidate_id] = domain
-            all_tasks.append(task)
+            staged_ids.add(candidate_id)
+            staged_tasks.append(task)
         else:
+            all_tasks.extend(staged_tasks)
+            candidate_domains.update({task.candidate.candidate_id: domain for task in staged_tasks})
             domains_planned.append(domain)
 
     if not all_tasks:
@@ -257,7 +261,8 @@ def run_global_acquisition_cycle(
             "receipts": [],
             "selected_acquire_ids": [],
             "report": {
-                "discovered": 0, "rights_resolved": 0, "acquired": 0,
+                "discovered": 0, "source_families_discovered": [],
+                "rights_resolved": 0, "acquired": 0,
                 "metadata_only": 0, "gated": 0, "failed": 0, "changed_domains": [],
             },
             "projection": build_acquisition_projection(
@@ -346,6 +351,7 @@ def run_global_acquisition_cycle(
         "projections": projections,
         "report": {
             "discovered": len(all_tasks),
+            "source_families_discovered": sorted({candidate.source_family for candidate in candidates.values()}),
             "rights_resolved": rights_resolved,
             "acquired": acquired,
             "metadata_only": metadata_only,

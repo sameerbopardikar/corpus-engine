@@ -3,6 +3,7 @@
 
 Verbs:
 
+    corpus-start start       --topic Nutrition --run-root <dir> [--resume-live-root <path>]
     corpus-start begin       --topic Nutrition --run-root <dir> [--resume-live-root <path>]
     corpus-start apply-packet --run <dir> --packet <file>
     corpus-start continue    --run <dir>

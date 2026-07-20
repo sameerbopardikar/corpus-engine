@@ -179,6 +179,7 @@ class AgenticEngineeringShadowVerticalTests(unittest.TestCase):
 
         receipt = self.execute_cycle()
         self.assertEqual(receipt["status"], "verified_shadow_complete")
+        self.assertEqual(receipt["doctrine_decision"]["decision"], "proposed")
         self.assertEqual(len(doctrine.read_text(encoding="utf-8").splitlines()), 1)
         self.assertEqual(self.calls["acquire"], 1)
 

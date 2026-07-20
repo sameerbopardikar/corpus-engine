@@ -57,7 +57,10 @@
   "evidence_lanes": {
     "scientific-evaluation": 1.15,
     "security-evaluation": 1.12,
+    "security-incident": 1.12,
     "production-reliability": 1.1,
+    "production-deployment": 1.1,
+    "foundational": 1.1,
     "production-architecture": 1.05,
     "implementation-research": 1.0,
     "practitioner-implementation": 0.95,
@@ -68,14 +71,14 @@
     {
       "family": "peer-reviewed-literature",
       "acquisition_mode": "public_open_access_fetch",
-      "rights_state": "public_rights_clear",
-      "shared_corpus_eligible": true
+      "rights_state": "rights_unclear",
+      "shared_corpus_eligible": false
     },
     {
       "family": "open-source-repository",
       "acquisition_mode": "public_open_access_fetch",
-      "rights_state": "public_rights_clear",
-      "shared_corpus_eligible": true
+      "rights_state": "rights_unclear",
+      "shared_corpus_eligible": false
     },
     {
       "family": "practitioner-publications",

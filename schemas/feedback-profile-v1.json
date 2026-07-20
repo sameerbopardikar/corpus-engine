@@ -5,6 +5,27 @@
   "description": "Strict, versioned applied-feedback profile. The authoritative validator is corpus_feedback.parse_feedback_profile; this schema documents the contract.",
   "type": "object",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "privacy": {
+            "properties": {"export_scope": {"const": "shared"}},
+            "required": ["export_scope"]
+          }
+        },
+        "required": ["privacy"]
+      },
+      "then": {
+        "properties": {
+          "privacy": {
+            "properties": {"forbid_private_outcome_export": {"const": true}},
+            "required": ["forbid_private_outcome_export"]
+          }
+        }
+      }
+    }
+  ],
   "required": [
     "schema_version", "profile_id", "version", "domain", "title",
     "target_decisions", "score_dimensions", "applicability", "outcome_metrics",

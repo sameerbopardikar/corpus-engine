@@ -261,6 +261,16 @@ class CorpusStartRun:
 
     def _do_acquire(self, ctx: PhaseContext) -> dict[str, Any]:
         receipt = self._boundaries.acquire(ctx)
+        sources_discovered = int(receipt.get("sources_discovered", 0))
+        source_families = receipt.get("source_families_discovered")
+        if sources_discovered < 5:
+            raise StartOrchestrationError(
+                "clean proof requires at least five discovered candidates"
+            )
+        if not isinstance(source_families, list) or len(set(source_families)) < 3:
+            raise StartOrchestrationError(
+                "clean proof requires at least three discovered source families"
+            )
         sources_acquired = int(receipt.get("sources_acquired", 0))
         if sources_acquired < 1:
             raise StartOrchestrationError(
@@ -270,7 +280,8 @@ class CorpusStartRun:
         if not isinstance(owned, list) or len(owned) < sources_acquired:
             raise StartOrchestrationError("acquisition receipt must own every acquired source path")
         return {
-            "sources_discovered": int(receipt.get("sources_discovered", sources_acquired)),
+            "sources_discovered": sources_discovered,
+            "source_families_discovered": sorted(set(str(family) for family in source_families)),
             "sources_acquired": sources_acquired,
             "owned_sources": [str(p) for p in owned],
         }
@@ -356,6 +367,7 @@ class CorpusStartRun:
             "clean_root": self._state.clean_root,
             "field_map_ready": bool(bootstrap.get("field_map_ready", False)),
             "sources_discovered": int(acquire.get("sources_discovered", 0)),
+            "source_family_count": len(set(acquire.get("source_families_discovered", []))),
             "sources_acquired": int(acquire.get("sources_acquired", 0)),
             "gbrain_sync_verified": bool(gbrain.get("verified", False)),
             "atlas_ready": bool(atlas.get("atlas_ready", False)),

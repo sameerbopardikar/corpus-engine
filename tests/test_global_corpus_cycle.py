@@ -103,6 +103,26 @@ class GlobalRankingTests(unittest.TestCase):
         self.assertEqual(result["failures"][0]["domain"], "agentic-engineering")
         self.assertEqual(set(result["candidate_domains"].values()), {"training"})
 
+    def test_partially_invalid_domain_contributes_no_tasks(self):
+        bad_task = _task("agentic-engineering", "must-not-leak", score=0.99)
+        good_task = _task("training", "valid", score=0.4)
+        result = run_global_cycle(
+            reservation_id="global-partial-invalid",
+            domain_loaders=[
+                ("agentic-engineering", lambda: [bad_task, object()]),
+                ("training", lambda: [good_task]),
+            ],
+            policy=self.policy,
+            budget_ledger_path=self.budget,
+            now=NOW,
+        )
+        self.assertEqual(result["domains_planned"], ["training"])
+        self.assertNotIn(bad_task.candidate.candidate_id, result["candidate_domains"])
+        self.assertEqual(
+            [decision.candidate_id for decision in result["plan"].decisions],
+            [good_task.candidate.candidate_id],
+        )
+
     def test_single_shared_budget_ledger_no_per_domain_budget(self):
         loaders = [
             ("agentic-engineering", lambda: [_task("agentic-engineering", "a", score=0.9)]),

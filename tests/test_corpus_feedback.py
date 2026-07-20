@@ -56,6 +56,26 @@ CANDIDATES = [
 
 
 class ProfileRankingTests(unittest.TestCase):
+    def test_shared_export_requires_private_outcome_guard(self):
+        data = {
+            "schema_version": 1,
+            "profile_id": "unsafe-shared",
+            "version": 1,
+            "domain": "training",
+            "title": "unsafe",
+            "target_decisions": ["acquisition_ranking"],
+            "score_dimensions": {"scientific": 1.0},
+            "applicability": {"evidence_lanes_allow": [], "evidence_lanes_deny": [], "rights_allow": []},
+            "outcome_metrics": [{"key": "corpus_recall", "direction": "maximize", "scope": "shared"}],
+            "time_horizon_days": 90,
+            "confounders": [],
+            "privacy": {"export_scope": "shared", "forbid_private_outcome_export": False},
+            "min_evidence": {"min_corroborations": 1, "min_distinct_sources": 1},
+            "regression_thresholds": {"max_outcome_regression": 0.1},
+        }
+        with self.assertRaisesRegex(FeedbackProfileError, "shared export_scope"):
+            parse_feedback_profile(data)
+
     def test_same_candidates_rank_differently_under_two_profiles(self):
         science = _profile("science-first", 1, {"scientific": 1.0, "practitioner": 0.1})
         practice = _profile("practice-first", 1, {"scientific": 0.1, "practitioner": 1.0})

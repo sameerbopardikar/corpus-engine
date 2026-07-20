@@ -103,6 +103,7 @@ def acquire_live(ctx: PhaseContext, *, runner: CommandRunner = _run_command) -> 
         )
     return {
         "sources_discovered": discovered,
+        "source_families_discovered": list(report.get("source_families_discovered", [])),
         "sources_acquired": acquired,
         "owned_sources": owned,
         "reservation_id": reservation,
