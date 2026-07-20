@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "receipt_type": "generalizable-training-v1-post-review-remediation-verification",
+  "status": "verified_remediation_code_baseline",
+  "recorded_at": "2026-07-20T02:44:09Z",
+  "updated_at": "2026-07-20T03:28:21Z",
+  "repository": "sameerbopardikar/corpus-engine",
+  "branch": "agent/generalizable-training-v1",
+  "verified_code_commit": "5adfa74552500e0377dd7e63b0c19196fb885520",
+  "verified_tree": "d81cdf7b899d5d11e5b78f9c47582d6ae93f8d48",
+  "parent_commit": "53203a96afe8637f22810caee27dca85222a5700",
+  "verification_scope": {
+    "code": true,
+    "configuration": true,
+    "schemas": true,
+    "tests": true,
+    "historical_receipts_rewritten": false,
+    "public_release_tag_created": false
+  },
+  "verification": {
+    "focused_second_wave": {
+      "command": "python3 -m unittest -v tests.test_security_review_regressions tests.test_published_schema_contracts tests.test_corpus_bootstrap_packet tests.test_corpus_start tests.test_corpus_start_live tests.test_global_corpus_cycle tests.test_global_cycle_acquisition tests.test_agentic_engineering_vertical tests.test_benchmark_adapter tests.test_corpus_feedback tests.test_corpus_rights_resolver tests.test_corpus_scout_import",
+      "tests_run": 141,
+      "result": "passed"
+    },
+    "full_suite": {
+      "command": "python3 -m unittest discover -s tests -v",
+      "tests_run": 606,
+      "result": "passed"
+    },
+    "final_review_regressions": {
+      "command": "python3 -m unittest -v tests.test_global_cycle_acquisition tests.test_published_schema_contracts",
+      "tests_run": 15,
+      "result": "passed"
+    },
+    "loader_integrity_regressions": {
+      "command": "python3 -m unittest -v tests.test_global_cycle_acquisition",
+      "tests_run": 15,
+      "result": "passed"
+    },
+    "compile": {
+      "command": "python3 -m compileall -q src tests scripts",
+      "result": "passed"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    "staged_secret_scan": {
+      "command": "gitleaks protect --staged --no-banner --redact --exit-code 1",
+      "result": "passed_no_leaks"
+    },
+    "history_secret_scan": {
+      "command": "gitleaks detect --source . --no-banner --redact --report-format json",
+      "result": "two_known_historical_false_positives",
+      "findings": [
+        {"rule_id": "generic-api-key", "file": "docs/source-maps/training-seed-candidates.json", "line": 84, "classification": "authority_tier_fixture_false_positive"},
+        {"rule_id": "generic-api-key", "file": "tests/fixtures/agentic_engineering_registry.json", "line": 163, "classification": "authority_tier_fixture_false_positive"}
+      ]
+    }
+  },
+  "review_resolution": {
+    "coderabbit_first_wave": "remediated in 21eefb0fa0320aa67fc8376c70cc7fa320f83773",
+    "coderabbit_second_wave": "remediated in b906fc1ef9a338a13c5c9e814017dc16f9d08e85",
+    "coderabbit_final_runtime_findings": "remediated in 668c84835d96938deec2ba9cd4f7e88c7709032b",
+    "coderabbit_loader_integrity_finding": "remediated in a631eb382c9bd90febcb3c066418b8435540927e",
+    "coderabbit_planned_domain_integrity_finding": "remediated in 5adfa74552500e0377dd7e63b0c19196fb885520",
+    "prompt_injection_comment": "verified_false_positive_due_to_prohibited_behavior_variant_check",
+    "independent_p1_ledger": "superseded_with_historical_provenance_preserved"
+  },
+  "historical_receipt_lineage": {
+    "receipt": ".hermes/receipts/2026-07-17T090746Z-agentic-engineering-v1-verified-complete.json",
+    "verified_commit": "f426861b31a86d1804eab2703c3b5a20c3425f37",
+    "relationship": "historical_predecessor_only_not_current_release_proof"
+  },
+  "verification_binding_note": "This post-review receipt binds the exact tested remediation code/config/schema tree at 5adfa74552500e0377dd7e63b0c19196fb885520. It does not replace the original frozen V1 proof or claim to be the final merged release tag."
+}

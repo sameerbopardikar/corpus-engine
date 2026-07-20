@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "slice": "independent-p1-priority-durability-remediation",
+  "recorded_at": "2026-07-17T07:12:03Z",
+  "commit": "27d1952eac77ddea08a14b584ae1c56eb95ccd76",
+  "commit_diff_sha256": "2a020a529a0a8280d78de7321ead7c8c8b01bbbffb197f0b5fa8162b9bc19351",
+  "red_evidence": {
+    "command": "python3 -m unittest tests/test_corpus_priority.py -v",
+    "result": "16 tests run; 2 failed before implementation",
+    "failures": [
+      "coherent plan rewrite was accepted because stored rollups were only internally cross-checked",
+      "idempotent read changed lock-file ctime because every open unconditionally called fchmod"
+    ]
+  },
+  "implementation": [
+    "persist canonical reservation request preimages and contiguous reservation sequence",
+    "verify request SHA-256 and deterministically replay each plan against prior per-day usage",
+    "reject plan/request, identity, UTC-day, and sequence mismatches",
+    "avoid fchmod when private mode is already correct so no-op reads preserve lock metadata"
+  ],
+  "verification": {
+    "focused": "python3 -m unittest tests/test_corpus_priority.py -v => 16 passed",
+    "full": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 146 passed",
+    "static": "python3 -m compileall -q src tests && git diff --check && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed"
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_blast/code_callers returned not_found/not_built for _open_private_regular and BudgetLedger._read_state",
+    "native_inspection": "_open_private_regular is used only by BudgetLedger constructor, state readback, usage_for_day, and reserve_cycle in src/corpus_priority.py; reservation schema is used only by BudgetLedger and tests/test_corpus_priority.py"
+  },
+  "closed_findings": [
+    "durable atomic daily reservation across concurrent processes",
+    "strict duplicate and unknown nested policy key parsing",
+    "reserved aging-slot eventual service",
+    "conflicting reservation ID physical no-op",
+    "coherent stored-plan tamper detection via request replay",
+    "state symlink rejection",
+    "idempotent state and lock metadata preservation"
+  ],
+  "next_action": "Close the remaining discovery/queue P1s with current-byte adversarial tests: impossible replay transitions, artifact-backed authorized proof, domain/rights admission, automatic expired-lease recovery, and atomic-write rollback/readback."
+}

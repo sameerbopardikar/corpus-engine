@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-budgeted-priority-20260717T063102Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "budgeted-ranking-and-promotion-policy-complete",
+  "commit": "6aef0c46bcbce1dbfa910d0409d126b5a7aa626b",
+  "diff_sha256": "e06da60c3481f5f54ceb3abea5dfe60eb3eaf34d610434272a45e4e19eb94b38",
+  "recorded_at": "2026-07-17T06:31:02Z",
+  "summary": "Added a deterministic rights-aware priority planner with checked-in policy, explicit daily/cycle item-token-cost caps, no-material-delta suppression, exponential retry/backoff, bounded starvation control, stable reason codes, and promotion-quality separation from cost/age scheduling priority.",
+  "files": [
+    "src/corpus_priority.py",
+    "tests/test_corpus_priority.py",
+    "config/agentic-engineering-policy.json",
+    "docs/policies/agentic-engineering-candidate-policy.md"
+  ],
+  "tdd": {
+    "initial_red": "python3 -m unittest tests/test_corpus_priority.py -v => import error because corpus_priority did not exist",
+    "adversarial_red": "10-test focused suite exposed missing fail-closed policy defaults/positive weights, missing positive LLM token estimate, and age/cost contaminating promotion quality (2 failures, 1 error)",
+    "focused_green": "python3 -m unittest tests/test_corpus_priority.py -v => 10 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 140 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --check && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed"
+  },
+  "acceptance": {
+    "deterministic_under_reordered_input": true,
+    "rights_unclear_unknown_private_auto_ineligible": true,
+    "public_metadata_inspection_only": true,
+    "no_material_delta_schedules_no_llm_work": true,
+    "max_items_per_cycle": 3,
+    "max_deep_public_source_packages_per_utc_day": 3,
+    "max_llm_tasks_per_cycle": 1,
+    "max_llm_tasks_per_utc_day": 1,
+    "max_llm_tokens_per_utc_day": 50000,
+    "max_estimated_cost_usd_per_utc_day": 1.0,
+    "retry_backoff": "300 seconds exponential to 86400 seconds; 5 attempts exhaust automatic retry",
+    "bounded_starvation_control": true,
+    "cost_normalized_ranking": true,
+    "promotion_quality_excludes_age_and_cost": true,
+    "automatic_promotion_enabled": false
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code definitions/callers were unavailable (status not_built) for Candidate, WorkItem, PriorityPolicy.__post_init__, CandidateTask.__post_init__, _score and plan_cycle.",
+    "repository_search": "The slice adds four new files and edits no pre-existing function. corpus_priority is referenced only by its focused tests in this commit."
+  },
+  "external_acquisition": {
+    "deep_public_source_packages_today_this_slice": 0,
+    "llm_calls": 0,
+    "estimated_model_cost_usd": 0.0
+  },
+  "production_effect": "None. No live corpus/raw archive/GBrain/scheduler, Expert/Percival behavior, credential, config or external system was mutated.",
+  "next_action": "Add failing doctrine-event and replay tests for create/alias/merge/split/revise/bound/supersede/deprecate/reject/restore, then implement versioned doctrine lineage with citation and rollback preservation."
+}

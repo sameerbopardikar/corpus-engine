@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "slice": "discovery-replay-and-expired-lease-recovery",
+  "recorded_at": "2026-07-17T07:20:59Z",
+  "commit": "1a68f6f9e19fe2abf2c3d3efef4b4715a077fb94",
+  "commit_diff_sha256": "fd36e8c5dbc5c3f68438b626449c719adb580caf929894cd300ef0d770feccf5",
+  "red_evidence": {
+    "command": "python3 -m unittest tests/test_corpus_discovery_adversarial.py -v",
+    "result": "11 tests run; 2 failed before implementation",
+    "failures": [
+      "replay accepted a valid leased snapshot falsely labeled completed directly after enqueue",
+      "selection stranded an expired lease instead of durably recovering it before ranking"
+    ]
+  },
+  "implementation": [
+    "recompute every leased, failed, completed and lease-expired work transition from the prior replay projection",
+    "reject unknown labels, impossible adjacency, altered immutable fields and snapshots inconsistent with declared transition semantics",
+    "sweep expired leases under the discovery transaction before deterministic work selection",
+    "append and fsync lease-expired events so restart readback preserves attempts and fencing generation"
+  ],
+  "verification": {
+    "focused": "python3 -m unittest tests/test_corpus_discovery.py tests/test_corpus_discovery_adversarial.py -v => 31 passed",
+    "full": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 148 passed",
+    "static": "python3 -m compileall -q src tests && git diff --check && python3 -m json.tool config/agentic-engineering-policy.json >/dev/null => passed"
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_blast returned not_found for DiscoveryEngine._replay, DiscoveryEngine.lease_work, DiscoveryEngine.complete_work and DiscoveryLedger.append",
+    "native_inspection": "repository search showed work_state_changed replay is authoritative for all lease/fail/complete/expiry mutations; select_work is exercised directly by discovery queue tests and no external callers were present in the repository"
+  },
+  "closed_findings": [
+    "impossible replay transitions",
+    "automatic expired-lease recovery during selection",
+    "durable restart readback of recovered leases"
+  ],
+  "remaining_findings": [
+    "artifact-backed verifier-authorized completion proof",
+    "candidate/domain/rights admission at work enqueue",
+    "atomic ledger append rollback/readback under injected write failure",
+    "adapter rights/cursor/pending-caption/content-addressed provenance/minimum-content findings"
+  ],
+  "next_action": "Add failing adversarial tests and minimal implementation for artifact-backed verifier-authorized completion proof, candidate/domain/rights admission, and atomic ledger append rollback/readback; then close adapter P1s before doctrine events."
+}

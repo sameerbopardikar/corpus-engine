@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-shared-adapter-contract-20260717T052809Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "shared-adapter-contract-complete",
+  "commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
+  "recorded_at": "2026-07-17T05:28:09Z",
+  "summary": "Added an immutable, bounded shared adapter contract with raw-byte provenance, explicit rights and failure states, atomic observation-plus-cursor commits, retry idempotency and zero registry promotion.",
+  "files": [
+    "src/corpus_adapters/__init__.py",
+    "src/corpus_adapters/types.py",
+    "src/corpus_adapters/base.py",
+    "tests/test_corpus_adapter_contract.py"
+  ],
+  "tdd": {
+    "red": "python3 -m unittest tests/test_corpus_adapter_contract.py -v => import failed because corpus_adapters did not exist",
+    "focused_green": "python3 -m unittest tests/test_corpus_adapter_contract.py -v => 8 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 103 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --check => passed"
+  },
+  "acceptance": {
+    "immutable_source_spec": true,
+    "bounded_inventory": true,
+    "transport_receipt_and_raw_hash": true,
+    "atomic_observation_cursor_commit": true,
+    "retry_physical_idempotency": true,
+    "malformed_and_transport_failure_classification": true,
+    "rights_state_escalation_rejected": true,
+    "registry_promotion": false
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_callers reported graph not built and code_blast reported not_found for the new symbol.",
+    "repository_search": "_verify_raw has one direct caller, AdapterRunner.run, in src/corpus_adapters/base.py; no pre-existing modules were modified."
+  },
+  "production_effect": "None. No live corpus, GBrain source, scheduler, Expert/Percival behavior, credentials or external system was changed.",
+  "manager_update": {
+    "update_key": "shared-adapter-contract-complete",
+    "delivery_id": "mgr_ada98cb05a4e47e6",
+    "delivered": true
+  },
+  "next_action": "Port the existing web/GitHub/YouTube refresh behavior behind the shared contract with adversarial regression tests, then prove the copied-live IndyDevDan projection remains unchanged absent a real revision."
+}

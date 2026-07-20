@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "objective": "Finish and verify the autonomous Agentic Engineering corpus engine V1 on the existing GBrain-native corpora source.",
+  "repo": "/root/workspace/self-expanding-corpus-engine",
+  "worktree": "/root/workspace/self-expanding-corpus-engine/.worktrees/hermes-agentic-corpus-personal-v0",
+  "branch": "agent/hermes-agentic-corpus-personal-v0",
+  "base_commit": "38395b1c0813cfe3b5c929a0adb02c93bface271",
+  "status": "verified_complete",
+  "terminal_semantics": "work_completed",
+  "current_phase": "verified-complete-routine-metabolism-owned-by-existing-scheduler",
+  "authority": "single-writer controller in the named worktree",
+  "production_boundary": "Expert/Percival production remained untouched. Only the reversible corpus package and the existing corpus-engine-cycle were updated.",
+  "completion_test": "Passed: a public MIT AgentDojo package was selected, acquired with raw immutable provenance, synced into GBrain source corpora, evaluated, projected into a probationary external doctrine object, replayed with an explicit unchanged reason, recorded in a stable receipt, and followed by a deterministic next gap; deployment, scheduler uniqueness and rollback were independently exercised.",
+  "completed_slices": [
+    "durable discovery core and queue with replay, leases, proof-backed completion and budget reservation hardening",
+    "strict seed loader, personal V0 ranker and acquired-evidence dashboard reconciliation",
+    "shared immutable adapter contract and rights-bounded web, GitHub, YouTube, arXiv, OpenAlex, benchmark, RSS, production-report and X signal adapters",
+    "deterministic budgeted priority policy with explicit item, token, cost, rights, no-delta, retry and starvation controls",
+    "append-only versioned doctrine events with citations, aliases, merge/split/supersession, contradiction bounds, rollback and Sameer-adoption separation",
+    "deterministic integrity, retrieval, attribution, contradiction, freshness, duplicate, false-promotion, lineage, cost and material-yield evaluations",
+    "restart-safe AgentDojo shadow vertical with immutable revision, raw SHA-256, corpora sync, source-scoped retrieval, doctrine decision, eval receipt and next-gap selection",
+    "atomic versioned release deployment behind the existing corpus-engine-cycle with current-byte copied-release tests, live cycle pass, backup and exercised rollback"
+  ],
+  "next_action": "No controller action. Let the existing corpus-engine-cycle own routine metabolism; automatic canonical promotion remains disabled until future shadow evidence justifies a separately reviewed change.",
+  "last_verified": {
+    "source_commit": "f4268616bfd5498ab86098c0ffdb7098a9af9341",
+    "branch_diff_sha256": "24dacf0920970a4a7140a95cc809c22b72423668b0760112788bcd7f50849f17",
+    "focused_tests": "python3 -m unittest tests/test_agentic_engineering_v0.py tests/test_agentic_engineering_vertical.py -q => 16 passed",
+    "full_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -q => 195 passed",
+    "frozen_release_tests": "python3 -m unittest discover -s /root/.hermes/releases/agentic-engineering-v1/f4268616bfd5/tests -p 'test_*.py' -q => 195 passed",
+    "static": "python3 -m compileall -q src tests scripts && git diff --check => passed",
+    "live_cycle": "/root/.hermes/scripts/corpus_engine_cycle_v1.sh => exit 0; corpus commit 52f8b21",
+    "source_scoped_retrieval": "AgentDojo returned first from source corpora at score 0.8895",
+    "scheduler": "exactly one active corpus-engine-cycle; gateway scheduler healthy",
+    "rollback": "20260717T090520Z rollback restored and hash-verified the prior package, followed by atomic restoration/import smoke of f4268616bfd5",
+    "receipt": ".hermes/receipts/2026-07-17T090746Z-agentic-engineering-v1-verified-complete.json"
+  },
+  "live_vertical": {
+    "cycle_id": "shadow-20260717-agentdojo-v1b",
+    "status": "verified_shadow_complete",
+    "receipt": "/root/exports/thinker-corpora/agentic-engineering/shadow-v1/receipts/shadow-20260717-agentdojo-v1b.json",
+    "source_revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "corpus_commit": "562673fba81ec15ccab69b42efe5e9449754dbc5",
+    "doctrine_decision": "unchanged on replay because the same probationary external statement and citation already existed",
+    "sameer_adopted": false,
+    "automatic_promotion_enabled": false,
+    "next_gap": "https://github.com/Aider-AI/aider"
+  },
+  "deployment": {
+    "release_root": "/root/.hermes/releases/agentic-engineering-v1/f4268616bfd5",
+    "backup_root": "/root/.hermes/backups/agentic-engineering-v1/20260717T090520Z",
+    "rollback_script": "/root/.hermes/backups/agentic-engineering-v1/20260717T090520Z/rollback.sh",
+    "scheduler_job_id": "8dd792d2c75f",
+    "scheduler_name": "corpus-engine-cycle"
+  },
+  "manager_update_key": "verified-complete",
+  "manager_update": {
+    "delivered": true,
+    "delivery_id": "mgr_7b8b69a9cebe4b86",
+    "session_id": "20260717_090935_dc8320ac",
+    "slack_ts": "1784279373.369669",
+    "delivered_at": "2026-07-17T09:09:40Z"
+  },
+  "finish_controller": {
+    "job_id": "fbf435e265a4",
+    "status": "paused",
+    "paused_at": "2026-07-17T12:17:28Z",
+    "reason": "Campaign is verified_complete; continuing metabolism belongs only to corpus-engine-cycle."
+  },
+  "final_read_only_reverification": {
+    "verified_at": "2026-07-17T12:17:28Z",
+    "head": "813c9668f33142d7e55e5909c882c98735360849",
+    "focused_tests": "16 passed",
+    "full_worktree_tests": "195 passed",
+    "frozen_release_tests": "195 passed",
+    "release_import": "passed with release src on PYTHONPATH",
+    "raw_and_corpus_hash_readback": "passed",
+    "source_scoped_retrieval": "AgentDojo first at score 0.8864",
+    "dashboard_readback": "current and AgentDojo remains probationary",
+    "scheduler": "exactly one active corpus-engine-cycle; last run ok; gateway scheduler healthy"
+  },
+  "updated_at": "2026-07-17T12:17:28Z"
+}

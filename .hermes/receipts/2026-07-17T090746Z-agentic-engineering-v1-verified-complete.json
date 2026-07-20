@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "status": "verified_complete",
+  "completed_at": "2026-07-17T09:07:46Z",
+  "branch": "agent/hermes-agentic-corpus-personal-v0",
+  "commit": "f4268616bfd5498ab86098c0ffdb7098a9af9341",
+  "branch_diff_sha256": "24dacf0920970a4a7140a95cc809c22b72423668b0760112788bcd7f50849f17",
+  "runtime_failure_found": {
+    "command": "/root/.hermes/scripts/corpus_engine_cycle_v1.sh",
+    "failure": "Legacy self-expansion-v0 completion events lacked the proof metadata required by the hardened replay validator.",
+    "resolution": "Preserved the legacy ledger unchanged and moved the current default to the versioned proof-enforced self-expansion-v1 namespace.",
+    "tdd": "New default-state regression failed against self-expansion-v0, then passed after the namespace change."
+  },
+  "verification": {
+    "focused_tests": "python3 -m unittest tests/test_agentic_engineering_v0.py tests/test_agentic_engineering_vertical.py -q => 16 passed",
+    "full_worktree_tests": "python3 -m unittest discover -s tests -p 'test_*.py' -q => 195 passed",
+    "frozen_release_tests": "python3 -m unittest discover -s /root/.hermes/releases/agentic-engineering-v1/f4268616bfd5/tests -p 'test_*.py' -q => 195 passed",
+    "static": "python3 -m compileall -q src tests scripts && git diff --check => passed",
+    "deployed_cycle": "/root/.hermes/scripts/corpus_engine_cycle_v1.sh => exit 0; corpus commit 52f8b21; dashboard refreshed and synced",
+    "source_scoped_retrieval": "gbrain query with --source-id corpora returned agentic-engineering/sources/security-evaluation/agentdojo first at score 0.8895",
+    "scheduler": "Exactly one active job named corpus-engine-cycle; job 8dd792d2c75f uses corpus_engine_cycle_v1.sh; gateway scheduler healthy",
+    "rollback": "20260717T090520Z/rollback.sh restored prior links and verified all prior hashes, then current release was atomically restored and import-smoked"
+  },
+  "live_vertical": {
+    "cycle_id": "shadow-20260717-agentdojo-v1b",
+    "receipt_path": "/root/exports/thinker-corpora/agentic-engineering/shadow-v1/receipts/shadow-20260717-agentdojo-v1b.json",
+    "receipt_file_sha256": "65fd4972d98a0d2f7a45506a99e230a5e81badaa681b93ebb5fa44fbdbd40a2d",
+    "status": "verified_shadow_complete",
+    "source": "https://github.com/ethz-spylab/agentdojo",
+    "source_revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "rights_state": "public_rights_clear",
+    "license": "MIT",
+    "raw_sha256": "d8c6460ecce9bbf59ed300fbc74b4440188f74cd147a7611836270be49e7660e",
+    "normalized_sha256": "d8c6460ecce9bbf59ed300fbc74b4440188f74cd147a7611836270be49e7660e",
+    "corpus_page_sha256": "3e3e23e058e626dffa2dde142675591755a41c9cc0cdc8b2d3f913b3f583c063",
+    "corpus_commit": "562673fba81ec15ccab69b42efe5e9449754dbc5",
+    "doctrine_decision": "unchanged on replay: same probationary external-corpus statement and citation already present; Sameer-adopted=false",
+    "eval": "passed; integrity/citation/retrieval/lineage/cost/material-yield checks green; llm_calls=0; auto-promotion=false",
+    "next_gap": "https://github.com/Aider-AI/aider"
+  },
+  "dashboard": {
+    "cycle_id": "2026-07-17-personal-v0",
+    "generated_at": "2026-07-17T09:06:33Z",
+    "agentdojo_acquired": true,
+    "agentdojo_status": "probationary",
+    "agentdojo_revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "selected_next_ranked_gap": "garcia-molina-salem-sagas"
+  },
+  "deployment": {
+    "release_root": "/root/.hermes/releases/agentic-engineering-v1/f4268616bfd5",
+    "corpus_launcher": "/usr/local/bin/agentic-engineering-corpus",
+    "shadow_launcher": "/usr/local/bin/agentic-engineering-shadow",
+    "cycle_script": "/root/.hermes/scripts/corpus_engine_cycle_v1.sh",
+    "backup_root": "/root/.hermes/backups/agentic-engineering-v1/20260717T090520Z",
+    "rollback_script": "/root/.hermes/backups/agentic-engineering-v1/20260717T090520Z/rollback.sh"
+  },
+  "boundaries": {
+    "expert_percival_production_mutation": false,
+    "second_retrieval_system": false,
+    "additional_scheduler": false,
+    "automatic_promotion": false,
+    "llm_calls": 0
+  }
+}

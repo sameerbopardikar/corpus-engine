@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "receipt_id": "agentic-engineering-v1-adapter-p1-remediation-20260717T075156Z",
+  "campaign_id": "agentic-engineering-v1-finish-line",
+  "stage": "core-adapter-p1-remediation-complete",
+  "commit": "4362eeaa1b50b411cdd1441525c2994899794c87",
+  "diff_sha256": "f326ce2975f6ed774d28fd80cef85858621caa615993ad39c1b055f844adb8b8",
+  "recorded_at": "2026-07-17T07:51:56Z",
+  "summary": "Closed the release-gating adapter findings: YouTube inventory cursors now separate watermark/backlog state from content revision, initial inventory is emitted exactly once under a bounded 100-item fallback scan, empty stable scans are physical state no-ops, stable inventories retry pending captions, transcript artifacts preserve content-addressed raw and normalized historical revisions, web body acquisition fails closed for metadata-only rights, and short anti-bot/error pages fail before cursor commit.",
+  "tdd": {
+    "red": [
+      "YouTube cursor helpers and caption artifact preservation imports missing",
+      "WebDocumentAdapter rejected minimum_text_chars argument and committed short error content",
+      "Stable YouTube revision returned before retrying a pending caption",
+      "Metadata-only web source attempted full-body fetch"
+    ],
+    "focused_green": "python3 -m unittest tests/test_youtube_adapter.py tests/test_web_adapter.py tests/test_corpus_adapter_contract.py tests/test_corpus_engine.py -v => 29 passed",
+    "full_green": "python3 -m unittest discover -s tests -p 'test_*.py' -v => 158 passed",
+    "static_green": "python3 -m compileall -q src tests && git diff --check => passed"
+  },
+  "acceptance": {
+    "cursor_separate_from_content_revision": true,
+    "initial_inventory_exactly_once": true,
+    "bounded_fallback_inventory_scan": 100,
+    "stable_empty_scan_state_noop": true,
+    "pending_caption_retry": true,
+    "content_addressed_caption_raw_and_normalized": true,
+    "historical_caption_revisions_retrievable": true,
+    "metadata_only_web_body_fetch_rejected": true,
+    "minimum_content_rejected_before_commit": true,
+    "llm_calls": 0,
+    "external_source_packages_acquired": 0
+  },
+  "blast_radius": {
+    "code_graph": "GBrain code_def/code_callers/code_blast returned not_built/not_found for AdapterRunner.run, YouTubeFeedAdapter, WebDocumentAdapter, CorpusEngine.refresh_youtube and CorpusEngine.write_card.",
+    "repository_search": "AdapterRunner.run is used by CorpusEngine.run_adapter and adapter tests; YouTube parsing is used by the engine and YouTube tests; refresh_youtube is dispatched only from CorpusEngine.refresh_entry; WebDocumentAdapter is used by refresh_web and web tests."
+  },
+  "production_effect": "None. No live corpus, GBrain source, scheduler, Expert/Percival runtime, credential, config or external system was mutated.",
+  "next_action": "Begin Task 9 with adversarial RED tests for append-only versioned doctrine events, alias-safe merge/split, citation-preserving supersession, contradiction bounding, rejected-proposal no-op, and deterministic lineage replay."
+}

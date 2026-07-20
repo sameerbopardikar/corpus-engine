@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "topic_input": "Nutrition",
+  "domain": "nutrition",
+  "title": "Nutrition Research Corpus",
+  "objective": "Assemble rights-clear human-nutrition evidence across macronutrients, micronutrients, dietary patterns, and study methods to answer diet questions from primary literature.",
+  "axes": [
+    {
+      "key": "macronutrients",
+      "title": "Macronutrient Axis",
+      "topics": ["protein", "carbohydrate", "dietary-fat", "fiber"]
+    },
+    {
+      "key": "micronutrients",
+      "title": "Micronutrient Axis",
+      "topics": ["vitamin", "mineral", "electrolyte"]
+    },
+    {
+      "key": "dietary-patterns",
+      "title": "Dietary Pattern Axis",
+      "topics": ["mediterranean-diet", "plant-based-diet", "low-carbohydrate-diet"]
+    },
+    {
+      "key": "evidence-methods",
+      "title": "Evidence Method Axis",
+      "topics": ["randomized-controlled-trial", "systematic-review", "cohort-study"]
+    }
+  ],
+  "evidence_lanes": {
+    "systematic-review": 1.25,
+    "randomized-controlled-trial": 1.1,
+    "default": 0.85
+  },
+  "source_families": [
+    {"family": "systematic-review-database", "acquisition_mode": "public_open_access_fetch"},
+    {"family": "peer-reviewed-journal", "acquisition_mode": "public_open_access_fetch"},
+    {"family": "government-dietary-guideline", "acquisition_mode": "public_metadata_capture"}
+  ],
+  "candidate_locators": [
+    {"url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC-example-protein/", "title": "Protein intake and health outcomes review", "topics": ["protein", "systematic-review"]},
+    {"url": "https://www.cochranelibrary.com/cdsr/example-fiber", "title": "Dietary fiber and cardiovascular disease", "topics": ["fiber", "cohort-study"]},
+    {"url": "https://academic.oup.com/ajcn/example-mediterranean", "title": "Mediterranean diet randomized trial", "topics": ["mediterranean-diet", "randomized-controlled-trial"]},
+    {"url": "https://www.dietaryguidelines.gov/example-2020", "title": "National dietary guidelines summary", "topics": ["dietary-fat", "vitamin"]},
+    {"url": "https://pubmed.ncbi.nlm.nih.gov/example-micronutrient/", "title": "Micronutrient status and supplementation", "topics": ["vitamin", "mineral"]}
+  ],
+  "scout_provenance": [
+    {"query": "protein intake systematic review open access", "result_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC-example-protein/"},
+    {"query": "mediterranean diet randomized controlled trial", "result_url": "https://academic.oup.com/ajcn/example-mediterranean"}
+  ],
+  "existing_context_refs": []
+}

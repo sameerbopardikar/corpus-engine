@@ -1,0 +1,230 @@
+{
+  "corpus_revision": "rev-contract",
+  "coverage_pressure": [],
+  "cycle_id": "global-2026-07-19-contract",
+  "cycle_time_seconds": 2.5,
+  "domain": "training",
+  "generated_at": "2026-07-19T01:05:00Z",
+  "human_gates": [
+    {
+      "acquired_at": "2026-07-19T01:00:00Z",
+      "candidate_id": "cand_93e0f2eb7f3e6cba1e10b5e3",
+      "canonical_locator": "https://example.org/paid",
+      "canonical_sha256": null,
+      "disposition": "human_gate",
+      "domain": "training",
+      "estimated_cost_usd": 0.0,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": null,
+      "normalized_sha256": null,
+      "priority_score": null,
+      "raw_sha256": null,
+      "rights_basis": "paid_gate",
+      "rights_state": "rights_unclear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": null,
+      "status": "rejected",
+      "title": "Study W2",
+      "topics": [
+        "hypertrophy"
+      ],
+      "why_now": null
+    }
+  ],
+  "in_flight": [],
+  "next_best": {
+    "acquired_at": null,
+    "candidate_id": "cand-queued-W3",
+    "canonical_locator": "https://example.org/queued",
+    "canonical_sha256": null,
+    "disposition": "deferred",
+    "domain": "training",
+    "estimated_cost_usd": 0.4,
+    "evidence_lane": "primary-study",
+    "failure_reason": null,
+    "gap_served": "velocity-training",
+    "normalized_sha256": null,
+    "priority_score": 9.0,
+    "raw_sha256": null,
+    "rights_basis": "open_access_license:cc-by",
+    "rights_state": "public_rights_clear",
+    "source_family": "peer-reviewed-literature",
+    "staged_sha256": null,
+    "status": "queued",
+    "title": "Queued open study",
+    "topics": [
+      "velocity",
+      "hypertrophy"
+    ],
+    "why_now": "budget-capped this cycle"
+  },
+  "queued_candidates": [
+    {
+      "acquired_at": null,
+      "candidate_id": "cand-queued-W3",
+      "canonical_locator": "https://example.org/queued",
+      "canonical_sha256": null,
+      "disposition": "deferred",
+      "domain": "training",
+      "estimated_cost_usd": 0.4,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": "velocity-training",
+      "normalized_sha256": null,
+      "priority_score": 9.0,
+      "raw_sha256": null,
+      "rights_basis": "open_access_license:cc-by",
+      "rights_state": "public_rights_clear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": null,
+      "status": "queued",
+      "title": "Queued open study",
+      "topics": [
+        "velocity",
+        "hypertrophy"
+      ],
+      "why_now": "budget-capped this cycle"
+    }
+  ],
+  "ranked_candidates": [
+    {
+      "acquired_at": null,
+      "candidate_id": "cand-queued-W3",
+      "canonical_locator": "https://example.org/queued",
+      "canonical_sha256": null,
+      "disposition": "deferred",
+      "domain": "training",
+      "estimated_cost_usd": 0.4,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": "velocity-training",
+      "normalized_sha256": null,
+      "priority_score": 9.0,
+      "raw_sha256": null,
+      "rights_basis": "open_access_license:cc-by",
+      "rights_state": "public_rights_clear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": null,
+      "status": "queued",
+      "title": "Queued open study",
+      "topics": [
+        "velocity",
+        "hypertrophy"
+      ],
+      "why_now": "budget-capped this cycle"
+    },
+    {
+      "acquired_at": "2026-07-19T01:00:00Z",
+      "candidate_id": "cand_93e0f2eb7f3e6cba1e10b5e3",
+      "canonical_locator": "https://example.org/paid",
+      "canonical_sha256": null,
+      "disposition": "human_gate",
+      "domain": "training",
+      "estimated_cost_usd": 0.0,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": null,
+      "normalized_sha256": null,
+      "priority_score": null,
+      "raw_sha256": null,
+      "rights_basis": "paid_gate",
+      "rights_state": "rights_unclear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": null,
+      "status": "rejected",
+      "title": "Study W2",
+      "topics": [
+        "hypertrophy"
+      ],
+      "why_now": null
+    },
+    {
+      "acquired_at": "2026-07-19T01:00:00Z",
+      "candidate_id": "cand_f9e809e5f23fe8b4e02636e5",
+      "canonical_locator": "https://example.org/oa",
+      "canonical_sha256": null,
+      "disposition": "probationary",
+      "domain": "training",
+      "estimated_cost_usd": 0.0,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": null,
+      "normalized_sha256": "4d015f2cb29236498542f555b55a12755066f5c74165c2315579f7ab7331477a",
+      "priority_score": null,
+      "raw_sha256": "beed1b6bad9fc4a4ec134dfaae4d28715da44007fc565d3c219877abe78c84cd",
+      "rights_basis": "open_access_license:cc-by",
+      "rights_state": "public_rights_clear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": "65a9b50877e492de64e5e79657dc8f73ec4dd47b0b7aaba633e14e708d4ce24d",
+      "status": "probationary",
+      "title": "Study W1",
+      "topics": [
+        "hypertrophy"
+      ],
+      "why_now": null
+    }
+  ],
+  "recent_receipts": [
+    {
+      "acquired_at": "2026-07-19T01:00:00Z",
+      "candidate_id": "cand_f9e809e5f23fe8b4e02636e5",
+      "canonical_locator": "https://example.org/oa",
+      "canonical_sha256": null,
+      "disposition": "probationary",
+      "domain": "training",
+      "estimated_cost_usd": 0.0,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": null,
+      "normalized_sha256": "4d015f2cb29236498542f555b55a12755066f5c74165c2315579f7ab7331477a",
+      "priority_score": null,
+      "raw_sha256": "beed1b6bad9fc4a4ec134dfaae4d28715da44007fc565d3c219877abe78c84cd",
+      "rights_basis": "open_access_license:cc-by",
+      "rights_state": "public_rights_clear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": "65a9b50877e492de64e5e79657dc8f73ec4dd47b0b7aaba633e14e708d4ce24d",
+      "status": "probationary",
+      "title": "Study W1",
+      "topics": [
+        "hypertrophy"
+      ],
+      "why_now": null
+    },
+    {
+      "acquired_at": "2026-07-19T01:00:00Z",
+      "candidate_id": "cand_93e0f2eb7f3e6cba1e10b5e3",
+      "canonical_locator": "https://example.org/paid",
+      "canonical_sha256": null,
+      "disposition": "human_gate",
+      "domain": "training",
+      "estimated_cost_usd": 0.0,
+      "evidence_lane": "primary-study",
+      "failure_reason": null,
+      "gap_served": null,
+      "normalized_sha256": null,
+      "priority_score": null,
+      "raw_sha256": null,
+      "rights_basis": "paid_gate",
+      "rights_state": "rights_unclear",
+      "source_family": "peer-reviewed-literature",
+      "staged_sha256": null,
+      "status": "rejected",
+      "title": "Study W2",
+      "topics": [
+        "hypertrophy"
+      ],
+      "why_now": null
+    }
+  ],
+  "schema_version": 1,
+  "totals": {
+    "acquired": 1,
+    "discovered": 3,
+    "failed": 0,
+    "gated": 1,
+    "metadata_only": 0,
+    "queued": 1,
+    "rights_resolved": 2
+  }
+}

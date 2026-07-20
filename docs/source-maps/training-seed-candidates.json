@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "domain": "training",
+  "status": "candidate-seed-not-promoted",
+  "generated_at": "2026-07-18T00:00:00Z",
+  "policy": "Candidate metadata and suggested lanes only. The discovery ledger must verify canonical locators and rights before any acquisition. No paid or private source is acquired from this seed.",
+  "candidates": [
+    {
+      "id": "schoenfeld-hypertrophy-mechanisms",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/20847704/",
+      "source_type": "web_document",
+      "evidence_lane": "primary-study",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "frozen",
+      "topics": ["hypertrophy", "resistance-training", "strength"]
+    },
+    {
+      "id": "morin-force-velocity-profiling",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/26109229/",
+      "source_type": "web_document",
+      "evidence_lane": "primary-study",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "frozen",
+      "topics": ["force-velocity", "power-output", "sprint-speed"]
+    },
+    {
+      "id": "velocity-based-training-review",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/33555822/",
+      "source_type": "web_document",
+      "evidence_lane": "systematic-review",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "monthly",
+      "topics": ["load-velocity", "rate-of-force-development", "resistance-training"]
+    },
+    {
+      "id": "plyometric-vertical-jump-meta",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/26838985/",
+      "source_type": "web_document",
+      "evidence_lane": "systematic-review",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "frozen",
+      "topics": ["plyometrics", "vertical-jump", "explosiveness"]
+    },
+    {
+      "id": "seiler-polarized-endurance",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/20861519/",
+      "source_type": "web_document",
+      "evidence_lane": "primary-study",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "frozen",
+      "topics": ["endurance", "interval-training", "vo2-max"]
+    },
+    {
+      "id": "hiit-vo2max-adaptations",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/24552392/",
+      "source_type": "web_document",
+      "evidence_lane": "primary-study",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "monthly",
+      "topics": ["vo2-max", "cardio", "interval-training"]
+    },
+    {
+      "id": "sprint-mechanics-speed",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/31174325/",
+      "source_type": "web_document",
+      "evidence_lane": "primary-study",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "monthly",
+      "topics": ["speed", "sprint-speed", "contractile-velocity"]
+    },
+    {
+      "id": "periodization-strength-power",
+      "entity_type": "document",
+      "canonical_url": "https://www.nsca.com/education/articles/periodization-training-fundamentals/",
+      "source_type": "web_document",
+      "evidence_lane": "institutional-source",
+      "authority_tier": "B1-professional-body",
+      "refresh_class": "weekly",
+      "topics": ["periodization", "strength", "power"]
+    },
+    {
+      "id": "fascia-training-experimental",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/26643801/",
+      "source_type": "web_document",
+      "evidence_lane": "experimental-doctrine",
+      "authority_tier": "C-exploratory",
+      "refresh_class": "monthly",
+      "topics": ["fascia-training", "mobility", "recovery"]
+    },
+    {
+      "id": "recovery-fatigue-monitoring",
+      "entity_type": "paper",
+      "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/28698222/",
+      "source_type": "web_document",
+      "evidence_lane": "primary-study",
+      "authority_tier": "A2-peer-reviewed",
+      "refresh_class": "monthly",
+      "topics": ["recovery", "fatigue", "injury-risk"]
+    }
+  ]
+}
