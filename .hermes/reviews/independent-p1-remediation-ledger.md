@@ -1,8 +1,12 @@
-# Independent P1 remediation ledger
+# Independent P1 Remediation Ledger
 
-These findings remain release-gating until a current-commit regression test proves closure. Earlier reviews were bound to commits `488151e`, `dea139e`, and `6aef0c4`; re-check each against current bytes and close or remediate explicitly.
+## Supersession and closure
 
-## Durable discovery / queue
+**Status: historically superseded for the generalizable-training V1 release candidate.** The P1 findings below are retained verbatim as provenance, but they are no longer open release gates. Their discovery, priority, and adapter remediations are covered by the existing focused receipts and by `.hermes/receipts/2026-07-20T024409Z-generalizable-training-v1-release-candidate.json`, which binds the fully tested code baseline at `b906fc1ef9a338a13c5c9e814017dc16f9d08e85`.
+
+The older `.hermes/receipts/2026-07-17T090746Z-agentic-engineering-v1-verified-complete.json` remains unchanged and certifies only its historical `f426861…` campaign. It is not current release proof.
+
+## Historical findings
 
 - Replay must reject impossible state replacement such as `pending → done` without valid lease/transition events.
 - Completion proof must be digest-bound, artifact-backed, verifier-identified, and authorized; non-empty self-attestation is insufficient.
