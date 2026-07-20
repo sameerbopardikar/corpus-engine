@@ -242,6 +242,10 @@ def run_global_acquisition_cycle(
                 failures.append({"domain": domain, "error": "loader returned a non-CandidateTask"})
                 conflict = True
                 break
+            if task.candidate.domain != domain:
+                failures.append({"domain": domain, "error": "planned candidate domain mismatch"})
+                conflict = True
+                break
             candidate_id = task.candidate.candidate_id
             if candidate_id in candidate_domains:
                 failures.append({"domain": domain, "error": f"duplicate candidate across domains: {candidate_id}"})

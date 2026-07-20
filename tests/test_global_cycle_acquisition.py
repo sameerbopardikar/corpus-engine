@@ -224,6 +224,21 @@ class BudgetAndIsolationTests(CycleHarness):
         self.assertFalse(self.fetches)
         self.assertTrue(any("mismatched acquisition candidate" in f["error"] for f in result["failures"]))
 
+    def test_mismatched_planned_candidate_domain_is_rejected(self):
+        task, candidate = _pair("nutrition", "N1", "https://example.org/oa", CC)
+        malformed = DomainAcquisitionInputs(
+            domain="training",
+            tasks=[task],
+            acquisition_candidates={task.candidate.candidate_id: candidate},
+        )
+        result = self._run(
+            [("training", lambda: malformed)],
+            reservation_id="global-mismatched-planned-domain",
+        )
+        self.assertEqual(result["status"], "no_candidates")
+        self.assertFalse(self.fetches)
+        self.assertTrue(any(f["error"] == "planned candidate domain mismatch" for f in result["failures"]))
+
     def test_cross_domain_candidates_stage_into_separate_domain_dirs(self):
         pairs_a = [_pair("training", "W1", "https://example.org/oa", CC)]
         pairs_b = [_pair("nutrition", "N1", "https://example.org/oa2", CC)]
