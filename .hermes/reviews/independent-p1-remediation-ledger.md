@@ -2,7 +2,7 @@
 
 ## Supersession and closure
 
-**Status: historically superseded for the generalizable-training V1 release candidate.** The P1 findings below are retained verbatim as provenance, but they are no longer open release gates. Their discovery, priority, adapter, and global-cycle remediations are covered by the existing focused receipts and by `.hermes/receipts/2026-07-20T024409Z-generalizable-training-v1-release-candidate.json`, which binds the fully tested code baseline at `668c84835d96938deec2ba9cd4f7e88c7709032b`.
+**Status: historically superseded for the generalizable-training V1 release candidate.** The P1 findings below are retained verbatim as provenance, but they are no longer open release gates. Their discovery, priority, adapter, and global-cycle remediations are covered by the existing focused receipts and by `.hermes/receipts/2026-07-20T024409Z-generalizable-training-v1-release-candidate.json`, which binds the fully tested code baseline at `a631eb382c9bd90febcb3c066418b8435540927e`.
 
 The older `.hermes/receipts/2026-07-17T090746Z-agentic-engineering-v1-verified-complete.json` remains unchanged and certifies only its historical `f426861…` campaign. It is not current release proof.
 
