@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -193,6 +194,35 @@ class BudgetAndIsolationTests(CycleHarness):
             f["domain"] == "training" and "executor unavailable" in f["error"]
             for f in result["failures"]
         ))
+
+    def test_non_candidate_task_is_rejected_without_aborting_healthy_domain(self):
+        nutrition = [_pair("nutrition", "N1", "https://example.org/oa2", CC)]
+        malformed = DomainAcquisitionInputs(
+            domain="training", tasks=[object()], acquisition_candidates={}  # type: ignore[list-item]
+        )
+        result = self._run([
+            ("training", lambda: malformed),
+            self._loader("nutrition", nutrition),
+        ], reservation_id="global-invalid-task")
+        self.assertEqual(result["report"]["acquired"], 1)
+        self.assertEqual(result["domains_planned"], ["nutrition"])
+        self.assertTrue(any(f["error"] == "loader returned a non-CandidateTask" for f in result["failures"]))
+
+    def test_mismatched_execution_candidate_is_rejected(self):
+        task, candidate = _pair("training", "W1", "https://example.org/oa", CC)
+        mismatched = replace(candidate, candidate_id="different-candidate")
+        malformed = DomainAcquisitionInputs(
+            domain="training",
+            tasks=[task],
+            acquisition_candidates={task.candidate.candidate_id: mismatched},
+        )
+        result = self._run(
+            [("training", lambda: malformed)],
+            reservation_id="global-mismatched-candidate",
+        )
+        self.assertEqual(result["status"], "no_candidates")
+        self.assertFalse(self.fetches)
+        self.assertTrue(any("mismatched acquisition candidate" in f["error"] for f in result["failures"]))
 
     def test_cross_domain_candidates_stage_into_separate_domain_dirs(self):
         pairs_a = [_pair("training", "W1", "https://example.org/oa", CC)]

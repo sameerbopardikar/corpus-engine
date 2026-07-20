@@ -238,13 +238,22 @@ def run_global_acquisition_cycle(
         conflict = False
         staged_tasks: list[CandidateTask] = []
         for task in inputs.tasks:
+            if not isinstance(task, CandidateTask):
+                failures.append({"domain": domain, "error": "loader returned a non-CandidateTask"})
+                conflict = True
+                break
             candidate_id = task.candidate.candidate_id
             if candidate_id in candidate_domains:
                 failures.append({"domain": domain, "error": f"duplicate candidate across domains: {candidate_id}"})
                 conflict = True
                 break
-            if candidate_id not in inputs.acquisition_candidates:
+            acquisition_candidate = inputs.acquisition_candidates.get(candidate_id)
+            if not isinstance(acquisition_candidate, AcquisitionCandidate):
                 failures.append({"domain": domain, "error": f"task {candidate_id} has no acquisition candidate"})
+                conflict = True
+                break
+            if acquisition_candidate.candidate_id != candidate_id or acquisition_candidate.domain != domain:
+                failures.append({"domain": domain, "error": f"task {candidate_id} has a mismatched acquisition candidate"})
                 conflict = True
                 break
             candidate_domains[candidate_id] = domain
