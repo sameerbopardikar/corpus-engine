@@ -29,6 +29,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SRC = _REPO_ROOT / "src"
@@ -316,20 +317,43 @@ def _default_discover(fetched_at, *, max_bytes=DEFAULT_MAX_BYTES):
         return _DiscoveryResponse(content=fetched.body, url=fetched.final_url)
 
     def discover(domain, topics):
+        openalex_candidates = []
         try:
-            candidates = discover_scholarly(
+            openalex_candidates = discover_scholarly(
                 domain=domain, topics=topics, http_get=http_get, fetched_at=fetched_at
             )
-            if candidates:
-                return candidates
+            # OpenAlex can return a healthy-looking candidate set whose only
+            # rights-cleared content locators are PDFs. The executor deliberately
+            # gates PDFs until a packaged extractor exists, so that set cannot
+            # satisfy the positive-acquisition contract. Continue through the
+            # independent Europe PMC/NCBI OA lane unless OpenAlex already yielded
+            # directly normalizable non-PDF content.
+            if any(
+                candidate.content_locator
+                and not urlsplit(candidate.content_locator).path.lower().endswith(".pdf")
+                for candidate in openalex_candidates
+            ):
+                return openalex_candidates
         except Exception:
             # Independent public fallback: Europe PMC search plus NCBI's OA
             # license service. This keeps a topic start moving when OpenAlex is
             # throttled without weakening the rights gate.
-            pass
-        return discover_europepmc(
-            domain=domain, topics=topics, http_get=http_get, fetched_at=fetched_at
-        )
+            openalex_candidates = []
+
+        try:
+            fallback_candidates = discover_europepmc(
+                domain=domain, topics=topics, http_get=http_get, fetched_at=fetched_at
+            )
+        except Exception:
+            # Preserve truthful OpenAlex metadata/PDF candidates when the
+            # independent fallback itself is unavailable.
+            return openalex_candidates
+
+        seen = {candidate.observation.canonical_url for candidate in fallback_candidates}
+        return fallback_candidates + [
+            candidate for candidate in openalex_candidates
+            if candidate.observation.canonical_url not in seen
+        ]
 
     return discover
 

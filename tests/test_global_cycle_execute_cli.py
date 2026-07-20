@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -42,6 +43,44 @@ def _html_fetch(url, *, timeout, max_bytes=None):
     return FetchResult(
         body=b"<html><body><p>hypertrophy strength adaptation evidence text long enough here</p></body></html>",
         final_url=url, content_type="text/html")
+
+
+class DefaultDiscoveryFallbackTests(unittest.TestCase):
+    def _candidate(self, *, locator):
+        CandidateObservation = script.CandidateRecord.from_observation.__func__.__globals__["CandidateObservation"]
+        obs = CandidateObservation.create(
+            domain="neuroscience", entity_type="paper",
+            canonical_url=f"https://openalex.org/W{abs(hash(locator))}",
+            discovery_source="scholarly_discovery:test", evidence_pointer=locator,
+            evidence_lane="primary-study", topics=("neuroscience",),
+            observed_at="2026-07-20T00:00:00Z",
+        )
+        return ScholarlyCandidate(
+            observation=obs,
+            rights_evidence=RightsEvidence(license="cc-by", access_class="open_content"),
+            openalex_id="test", title="Neuroscience evidence", content_locator=locator,
+            metadata={},
+        )
+
+    def test_openalex_pdf_only_triggers_europepmc_html_fallback(self):
+        pdf = self._candidate(locator="https://journal.example/paper.pdf")
+        html = self._candidate(locator="https://pmc.ncbi.nlm.nih.gov/articles/PMC123/")
+        calls = []
+        with patch.object(script, "discover_scholarly", lambda **_kwargs: [pdf]), \
+             patch.object(script, "discover_europepmc", lambda **_kwargs: calls.append("europepmc") or [html]):
+            discover = script._default_discover(lambda: "2026-07-20T00:00:00Z")
+            result = discover("neuroscience", ["neuroscience-foundations"])
+        self.assertEqual(calls, ["europepmc"])
+        self.assertEqual(result[0].content_locator, html.content_locator)
+        self.assertIn(pdf, result)
+
+    def test_openalex_html_candidate_avoids_fallback(self):
+        html = self._candidate(locator="https://pmc.ncbi.nlm.nih.gov/articles/PMC456/")
+        with patch.object(script, "discover_scholarly", lambda **_kwargs: [html]), \
+             patch.object(script, "discover_europepmc", lambda **_kwargs: self.fail("fallback should not run")):
+            discover = script._default_discover(lambda: "2026-07-20T00:00:00Z")
+            result = discover("neuroscience", ["neuroscience-foundations"])
+        self.assertEqual(result, [html])
 
 
 class MultiDomainExecuteTests(unittest.TestCase):
