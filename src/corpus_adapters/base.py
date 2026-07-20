@@ -141,8 +141,8 @@ class AdapterRunner:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         lock_fd = os.open(self.lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
         try:
-            os.fchmod(lock_fd, 0o600)
             with os.fdopen(lock_fd, "r+") as lock_file:
+                os.fchmod(lock_file.fileno(), 0o600)
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 state = self._read_state()
                 source_state = state["sources"].get(batch.source_id, {"cursor": None, "batches": []})

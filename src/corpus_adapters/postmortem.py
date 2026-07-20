@@ -5,19 +5,16 @@ import json
 from pathlib import Path
 from typing import Callable
 
-import requests
-
 from .base import SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
 
 _ALLOWED_CLASSES = {"vendor_case_study", "operator_report", "independent_postmortem"}
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, headers={"User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout)
 
 
 def _reports(document: dict, limit: int) -> list[dict]:

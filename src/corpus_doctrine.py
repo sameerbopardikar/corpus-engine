@@ -480,7 +480,7 @@ class DoctrineEngine:
             combined = _citation_union(parent["citations"], _citations(payload["citations"]))
             del self.concepts[source]
             created: list[dict[str, Any]] = []
-            for child, child_key in zip(children, child_keys):
+            for child, child_key in zip(children, child_keys, strict=True):
                 aliases = child.get("aliases", [])
                 if not isinstance(aliases, list):
                     raise ValueError("child aliases must be a list")

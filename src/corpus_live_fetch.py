@@ -23,6 +23,7 @@ from __future__ import annotations
 import http.client
 import socket
 import ssl
+from collections.abc import Mapping
 from urllib.parse import urljoin, urlsplit
 
 from corpus_acquisition_executor import DEFAULT_MAX_BYTES, FetchResult
@@ -97,6 +98,7 @@ def live_fetch(
     timeout: float,
     max_bytes: int = DEFAULT_MAX_BYTES,
     max_redirects: int = _DEFAULT_MAX_REDIRECTS,
+    headers: Mapping[str, str] | None = None,
 ) -> FetchResult:
     """Fetch ``url`` with SSRF pinning, manual redirects, and a hard byte cap."""
     current = url
@@ -116,7 +118,14 @@ def live_fetch(
             path = parsed.path or "/"
             if parsed.query:
                 path = f"{path}?{parsed.query}"
-            conn.request("GET", path, headers={"User-Agent": "GBrainCorpusEngine/1.0", "Host": host})
+            request_headers = {"User-Agent": "GBrainCorpusEngine/1.0"}
+            for name, value in (headers or {}).items():
+                # Adapter callers only need representation negotiation. Never
+                # forward credentials or a caller-controlled Host across hops.
+                if name.lower() == "accept":
+                    request_headers["Accept"] = str(value)
+            request_headers["Host"] = host
+            conn.request("GET", path, headers=request_headers)
             response = conn.getresponse()
             status = response.status
             if status in _REDIRECT_STATUSES:

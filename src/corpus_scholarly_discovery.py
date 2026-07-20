@@ -22,6 +22,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from urllib.parse import quote_plus, urlsplit
 
+from defusedxml.ElementTree import fromstring as safe_fromstring
+
 from corpus_engine_models import CandidateObservation
 from corpus_rights_resolver import RightsEvidence
 
@@ -348,7 +350,7 @@ def discover_europepmc(
         license_url = f"{oa_endpoint}?id={quote_plus(pmcid)}"
         try:
             license_response = http_get(license_url, timeout_seconds)
-            root = ET.fromstring(license_response.content)
+            root = safe_fromstring(license_response.content)
             record = root.find(".//record")
         except (ET.ParseError, AttributeError, ValueError):
             continue

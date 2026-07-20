@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-from xml.etree import ElementTree
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 RIGHTS_STATES = {"public", "owned", "licensed", "unknown"}
@@ -340,7 +340,7 @@ class IntakeStore:
         if ext == ".docx":
             self._validate_docx(data)
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                root = ElementTree.fromstring(archive.read("word/document.xml"))
+                root = safe_fromstring(archive.read("word/document.xml"))
                 paragraphs = []
                 for paragraph in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
                     text = "".join(node.text or "" for node in paragraph.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t"))
@@ -374,12 +374,19 @@ class IntakeStore:
             db.execute("INSERT INTO history(submission_id,status,at,detail) VALUES(?,?,?,?)",
                        (row["submission_id"], "processing", utc_iso(), "claimed by corpus-engine cycle"))
             db.commit()
+        target: Path | None = None
+        target_preexisted = False
+        evaluation_target: Path | None = None
+        evaluation_preexisted = False
         try:
             normalized = self._normalize(row)
             receipt = self._primary_receipt(row["submission_id"])
             relative = Path("intake") / f"{_slug(row['title'])}-{row['submission_id'][4:12]}.md"
             target = corpus_root / relative
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+            target_preexisted = target.exists()
+            if target_preexisted:
+                raise IntakeError("corpus target already exists")
             kind = "candidate_suggestion" if row["kind"] == "suggestion" else "submitted_source"
             lines = ["---", 'type: "source"', f"title: {_yaml(row['title'])}", f"intake_kind: {_yaml(kind)}",
                      f"receipt_id: {_yaml(receipt['receipt_id'])}", f"submission_id: {_yaml(row['submission_id'])}",
@@ -418,7 +425,11 @@ class IntakeStore:
             if not evaluation["passed"]:
                 raise IntakeError("deterministic intake evaluation failed")
             evaluation_relative = Path("evaluations") / f"{row['submission_id']}.json"
-            self._atomic_json(self.root / evaluation_relative, evaluation)
+            evaluation_target = self.root / evaluation_relative
+            evaluation_preexisted = evaluation_target.exists()
+            if evaluation_preexisted:
+                raise IntakeError("evaluation target already exists")
+            self._atomic_json(evaluation_target, evaluation)
             now = utc_iso()
             with self._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
@@ -431,6 +442,20 @@ class IntakeStore:
                     "status": "processed", "corpus_path": str(relative),
                     "evaluation_receipt": str(evaluation_relative), "processed_at": now}
         except Exception as exc:
+            cleanup_errors = []
+            for artifact, preexisted in (
+                (target, target_preexisted),
+                (evaluation_target, evaluation_preexisted),
+            ):
+                if artifact is None or preexisted or not artifact.exists() or artifact.is_symlink():
+                    continue
+                try:
+                    artifact.unlink()
+                    _fsync_dir(artifact.parent)
+                except OSError as cleanup_exc:
+                    cleanup_errors.append(f"{artifact}: {cleanup_exc}")
+            if cleanup_errors:
+                exc = IntakeError(f"{exc}; rejected-artifact cleanup failed: {'; '.join(cleanup_errors)}")
             with self._connect() as db:
                 db.execute("BEGIN IMMEDIATE")
                 db.execute("UPDATE submissions SET state='rejected',error=? WHERE submission_id=?", (str(exc)[:500], row["submission_id"]))

@@ -123,7 +123,10 @@ def _normalize_url(url: str) -> str:
         except ipaddress.AddressValueError as exc:
             raise ValueError("canonical_url has an invalid IPv6 host") from exc
     else:
-        normalized_host = host.encode("idna").decode("ascii").lower()
+        try:
+            normalized_host = host.encode("idna").decode("ascii").lower()
+        except UnicodeError as exc:
+            raise ValueError("canonical_url has an invalid host") from exc
     try:
         port = parsed.port
     except ValueError as exc:

@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-import requests
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from .base import SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
 
 
@@ -26,13 +27,11 @@ _NS = {
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, headers={"User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout)
 
 
 def parse_feed(body: bytes) -> list[dict[str, str]]:
-    root = ET.fromstring(body)
+    root = safe_fromstring(body)
     items: list[dict[str, str]] = []
     seen: set[str] = set()
     for node in root.findall("atom:entry", _NS):

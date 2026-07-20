@@ -6,10 +6,9 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
-import requests
-
 from .base import AdapterFailure, SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import FailureKind, InventoryRequest, NormalizedObservation, RightsState, SourceSpec, TransportPayload
 
 
@@ -56,9 +55,7 @@ class _VisibleTextParser(HTMLParser):
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, allow_redirects=True, headers={"User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout)
 
 
 class WebDocumentAdapter(SourceAdapter):

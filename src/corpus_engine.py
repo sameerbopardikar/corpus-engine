@@ -24,9 +24,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-
-import requests
-
 _SRC_ROOT = Path(__file__).resolve().parent
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
@@ -34,6 +31,7 @@ if str(_SRC_ROOT) not in sys.path:
 from corpus_adapters import STANDARD_ADAPTER_FAMILIES, build_adapter
 from corpus_adapters.base import AdapterRunner, SourceAdapter
 from corpus_adapters.github import GitHubRepositoryAdapter
+from corpus_adapters.http import SafeHttpResponse, safe_get
 from corpus_adapters.types import InventoryRequest, RightsState, SourceSpec
 from corpus_adapters.web import WebDocumentAdapter
 from corpus_adapters.youtube import YouTubeFeedAdapter, inventory_revision, normalize_caption_vtt, parse_feed, preserve_caption_artifacts
@@ -109,10 +107,10 @@ def json_quote(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def request(url: str, timeout: int = 45) -> requests.Response:
-    response = requests.get(url, timeout=timeout, allow_redirects=True, headers={"User-Agent": DEFAULT_UA})
-    response.raise_for_status()
-    return response
+def request(url: str, timeout: int = 45) -> SafeHttpResponse:
+    """Fetch through the shared DNS-pinned, per-redirect SSRF guard."""
+
+    return safe_get(url, timeout)
 
 
 def load_json(path: Path) -> dict[str, Any]:

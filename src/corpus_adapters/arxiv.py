@@ -7,10 +7,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
 
-import requests
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from .base import SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
 
 _ATOM = "{http://www.w3.org/2005/Atom}"
@@ -20,13 +21,11 @@ _GITHUB_CODE = re.compile(r"^https://github\.com/[^/]+/[^/]+/tree/(?P<revision>[
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, headers={"User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout)
 
 
 def _entries(body: bytes) -> list[ET.Element]:
-    root = ET.fromstring(body)
+    root = safe_fromstring(body)
     return root.findall(f"{_ATOM}entry")
 
 

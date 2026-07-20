@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
 
-import requests
-
 from .base import SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
 
 
@@ -18,9 +17,7 @@ _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, headers={"Accept": "application/vnd.github+json", "User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout, headers={"Accept": "application/vnd.github+json"})
 
 
 class GitHubRepositoryAdapter(SourceAdapter):

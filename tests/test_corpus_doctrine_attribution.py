@@ -135,7 +135,6 @@ class DomainScopedIdentityTests(unittest.TestCase):
         self.tmp = Path(self.tempdir.name)
 
     def test_domain_scoped_engine_stamps_domain_on_concepts(self):
-        engine = _engine(self.tmp / "training", domain="training")
         (self.tmp / "training").mkdir(parents=True, exist_ok=True)
         engine = DoctrineEngine(self.tmp / "training" / "doctrine.jsonl", domain="training")
         concept = _propose(engine)

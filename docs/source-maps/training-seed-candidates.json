@@ -10,7 +10,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/20847704/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "primary-study",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "frozen",
       "topics": ["hypertrophy", "resistance-training", "strength"]
@@ -20,7 +20,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/26109229/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "primary-study",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "frozen",
       "topics": ["force-velocity", "power-output", "sprint-speed"]
@@ -30,7 +30,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/33555822/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "systematic-review",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "monthly",
       "topics": ["load-velocity", "rate-of-force-development", "resistance-training"]
@@ -40,7 +40,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/26838985/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "systematic-review",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "frozen",
       "topics": ["plyometrics", "vertical-jump", "explosiveness"]
@@ -50,7 +50,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/20861519/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "primary-study",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "frozen",
       "topics": ["endurance", "interval-training", "vo2-max"]
@@ -60,7 +60,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/24552392/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "primary-study",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "monthly",
       "topics": ["vo2-max", "cardio", "interval-training"]
@@ -70,7 +70,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/31174325/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "primary-study",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "monthly",
       "topics": ["speed", "sprint-speed", "contractile-velocity"]
@@ -80,7 +80,7 @@
       "entity_type": "document",
       "canonical_url": "https://www.nsca.com/education/articles/periodization-training-fundamentals/",
       "source_type": "web_document",
-      "evidence_lane": "practitioner-implementation",
+      "evidence_lane": "institutional-source",
       "authority_tier": "B1-professional-body",
       "refresh_class": "weekly",
       "topics": ["periodization", "strength", "power"]
@@ -90,7 +90,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/26643801/",
       "source_type": "web_document",
-      "evidence_lane": "implementation-research",
+      "evidence_lane": "experimental-doctrine",
       "authority_tier": "C-exploratory",
       "refresh_class": "monthly",
       "topics": ["fascia-training", "mobility", "recovery"]
@@ -100,7 +100,7 @@
       "entity_type": "paper",
       "canonical_url": "https://pubmed.ncbi.nlm.nih.gov/28698222/",
       "source_type": "web_document",
-      "evidence_lane": "scientific-evaluation",
+      "evidence_lane": "primary-study",
       "authority_tier": "A2-peer-reviewed",
       "refresh_class": "monthly",
       "topics": ["recovery", "fatigue", "injury-risk"]

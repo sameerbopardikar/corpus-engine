@@ -6,19 +6,16 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
 
-import requests
-
 from .base import SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
 
 _GITHUB_REVISION = re.compile(r"^https://github\.com/[^/]+/[^/]+/tree/[0-9a-f]{40}/?$")
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, headers={"User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout)
 
 
 class BenchmarkAdapter(SourceAdapter):

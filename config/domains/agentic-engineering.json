@@ -57,8 +57,8 @@
   "evidence_lanes": {
     "scientific-evaluation": 1.15,
     "security-evaluation": 1.12,
-    "production-reliability": 1.05,
-    "production-architecture": 1.0,
+    "production-reliability": 1.1,
+    "production-architecture": 1.05,
     "implementation-research": 1.0,
     "practitioner-implementation": 0.95,
     "unverified-discovery-signal": 0.55,

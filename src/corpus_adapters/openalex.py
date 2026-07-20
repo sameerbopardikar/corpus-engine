@@ -6,19 +6,16 @@ import re
 from pathlib import Path
 from typing import Callable
 
-import requests
-
 from .base import SourceAdapter
 from .common import preserve_bytes, sha256_bytes
+from .http import safe_get
 from .types import InventoryRequest, NormalizedObservation, SourceSpec, TransportPayload
 
 _OPENALEX_ID = re.compile(r"^https://openalex\.org/(?P<id>W\d+)$")
 
 
 def _default_get(url: str, timeout: float):
-    response = requests.get(url, timeout=timeout, headers={"User-Agent": "GBrainCorpusEngine/1.0"})
-    response.raise_for_status()
-    return response
+    return safe_get(url, timeout)
 
 
 def _document(response) -> dict:
