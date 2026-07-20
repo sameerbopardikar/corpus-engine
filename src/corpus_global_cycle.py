@@ -17,7 +17,7 @@ budget is created or spent and no LLM work is scheduled.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -206,9 +206,13 @@ def run_global_acquisition_cycle(
         return _executor_cache[domain]
 
     def clock() -> str:
-        # The projection timestamp comes from the shared executor clock; under a
-        # factory, build a throwaway executor (constructing one creates no dirs).
-        return (executor if executor is not None else executor_factory("_")).now()
+        if executor is not None:
+            return executor.now()
+        # Never call a caller-provided factory solely to obtain a timestamp. A
+        # rejecting factory must remain isolated to its own domain boundary.
+        for cached in _executor_cache.values():
+            return cached.now()
+        return now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     all_tasks: list[CandidateTask] = []
     candidates: dict[str, AcquisitionCandidate] = {}
@@ -216,8 +220,13 @@ def run_global_acquisition_cycle(
     domain_order: list[str] = []
     domains_planned: list[str] = []
     failures: list[dict[str, str]] = []
+    seen_domains: set[str] = set()
 
     for domain, load in domain_loaders:
+        if domain in seen_domains:
+            failures.append({"domain": domain, "error": "duplicate domain loader"})
+            continue
+        seen_domains.add(domain)
         try:
             inputs = load()
         except Exception as exc:  # fail-soft: one domain cannot corrupt another
@@ -293,7 +302,11 @@ def run_global_acquisition_cycle(
     # Execute domain by domain so one domain's failure is isolated, and each
     # domain writes into its own isolated executor roots.
     for domain in domain_order:
-        domain_executor = get_executor(domain)
+        try:
+            domain_executor = get_executor(domain)
+        except Exception as exc:
+            failures.append({"domain": domain, "error": f"{type(exc).__name__}: {exc}"})
+            continue
         domain_candidate_ids = [cid for cid, dom in candidate_domains.items() if dom == domain]
         for candidate_id in domain_candidate_ids:
             candidate = candidates[candidate_id]

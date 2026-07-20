@@ -151,6 +151,49 @@ class BudgetAndIsolationTests(CycleHarness):
         self.assertEqual(result["report"]["acquired"], 1)
         self.assertIn("nutrition", result["report"]["changed_domains"])
 
+    def test_duplicate_domain_label_is_not_executed_twice(self):
+        first = [_pair("training", "W1", "https://example.org/oa", CC)]
+        duplicate = [_pair("training", "W2", "https://example.org/oa2", CC)]
+        result = self._run([
+            self._loader("training", first),
+            self._loader("training", duplicate),
+        ])
+        self.assertEqual(result["domains_planned"], ["training"])
+        self.assertEqual(result["report"]["discovered"], 1)
+        self.assertEqual(result["report"]["acquired"], 1)
+        self.assertEqual(len(self.fetches), 1)
+        self.assertTrue(any(f["error"] == "duplicate domain loader" for f in result["failures"]))
+
+    def test_executor_factory_failure_is_isolated_to_its_domain(self):
+        training = [_pair("training", "W1", "https://example.org/oa", CC)]
+        nutrition = [_pair("nutrition", "N1", "https://example.org/oa2", CC)]
+
+        def factory(domain):
+            if domain == "training":
+                raise RuntimeError("executor unavailable")
+            return self.executor
+
+        result = run_global_acquisition_cycle(
+            reservation_id="global-executor-isolation",
+            domain_loaders=[
+                self._loader("training", training),
+                self._loader("nutrition", nutrition),
+            ],
+            policy=PriorityPolicy.default(),
+            budget_ledger_path=self.root / "factory-budget.json",
+            now=self.now,
+            executor_factory=factory,
+            corpus_revision="rev-1",
+            cycle_time_seconds=3.0,
+        )
+        self.assertEqual(result["report"]["acquired"], 1)
+        self.assertEqual(len(self.fetches), 1)
+        self.assertIn("nutrition", result["report"]["changed_domains"])
+        self.assertTrue(any(
+            f["domain"] == "training" and "executor unavailable" in f["error"]
+            for f in result["failures"]
+        ))
+
     def test_cross_domain_candidates_stage_into_separate_domain_dirs(self):
         pairs_a = [_pair("training", "W1", "https://example.org/oa", CC)]
         pairs_b = [_pair("nutrition", "N1", "https://example.org/oa2", CC)]
