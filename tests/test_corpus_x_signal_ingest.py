@@ -140,6 +140,47 @@ class XSignalIngestTests(unittest.TestCase):
                 ingest_x_signals([self.signal()], output, max_items=0)
             with self.assertRaisesRegex(XSignalContractError, "exceeds max_items"):
                 ingest_x_signals([self.signal(), self.signal(url="https://x.com/builder/status/103")], output, max_items=1)
+    def test_optional_source_graph_expansion_adds_unknown_author_and_linked_repo_candidates(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "x-signals.json"
+            graph = root / "source-graph.jsonl"
+            discovery = root / "discovery-ledger.jsonl"
+            signal = self.signal(
+                author="@unseen_operator",
+                text="We changed the runtime shape.",
+                linked_primary_sources=["https://github.com/newco/new-runtime/tree/abc123"],
+            )
+
+            ingest_x_signals(
+                [signal],
+                output,
+                max_items=10,
+                domain="agentic-engineering",
+                source_graph_path=graph,
+                discovery_ledger_path=discovery,
+            )
+
+            from corpus_discovery import DiscoveryEngine
+
+            candidates = DiscoveryEngine(discovery).candidates.values()
+            urls = {candidate.canonical_url for candidate in candidates}
+            self.assertEqual(
+                urls,
+                {"https://x.com/unseen_operator", "https://github.com/newco/new-runtime"},
+            )
+            self.assertNotIn("graph engineering", graph.read_text(encoding="utf-8").lower())
+
+    def test_partial_source_graph_configuration_fails_closed_before_projection_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td) / "x-signals.json"
+            with self.assertRaisesRegex(XSignalContractError, "must be supplied together"):
+                ingest_x_signals(
+                    [self.signal()],
+                    output,
+                    domain="agentic-engineering",
+                )
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
