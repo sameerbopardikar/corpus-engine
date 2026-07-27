@@ -168,13 +168,31 @@ def _atomic_write(path: Path, encoded: bytes) -> None:
             pass
 
 
-def ingest_x_signals(signals: Iterable[dict[str, Any]], output_path: Path, *, max_items: int = 100) -> dict[str, Any]:
-    """Merge a bounded X radar batch into one deterministic, doctrine-ineligible projection.
+def ingest_x_signals(
+    signals: Iterable[dict[str, Any]],
+    output_path: Path,
+    *,
+    max_items: int = 100,
+    domain: str | None = None,
+    source_graph_path: Path | None = None,
+    discovery_ledger_path: Path | None = None,
+    topics: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Merge a bounded X radar batch and optionally expand the source graph.
 
-    X posts are preserved verbatim as discovery signals. External links are only
-    candidate primary-source locators; this function neither acquires them nor
-    promotes any X-only claim into doctrine.
+    X posts are preserved verbatim as discovery signals. External links remain
+    candidate primary-source locators and authors remain probationary creator
+    candidates; neither X-only claims nor linked material become doctrine here.
+    When the graph arguments are supplied, the full projection is reconciled
+    into the shared source graph and DiscoveryEngine without requiring a known
+    topic phrase. All four graph arguments are fail-closed as one configuration.
     """
+
+    graph_args = (domain, source_graph_path, discovery_ledger_path)
+    if any(value is not None for value in graph_args) and not all(value is not None for value in graph_args):
+        raise XSignalContractError(
+            "domain, source_graph_path, and discovery_ledger_path must be supplied together"
+        )
 
     if isinstance(max_items, bool) or not isinstance(max_items, int) or not 1 <= max_items <= 100:
         raise XSignalContractError("max_items must be an integer from 1 through 100")
@@ -206,7 +224,19 @@ def ingest_x_signals(signals: Iterable[dict[str, Any]], output_path: Path, *, ma
 
         projection = _project(by_url)
         encoded = (json.dumps(projection, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
-        if output_path.exists() and output_path.read_bytes() == encoded:
-            return projection
-        _atomic_write(output_path, encoded)
+        if not (output_path.exists() and output_path.read_bytes() == encoded):
+            _atomic_write(output_path, encoded)
+
+        if domain is not None and source_graph_path is not None and discovery_ledger_path is not None:
+            from corpus_source_graph import ingest_relationships, relationships_from_x_projection
+
+            relationships = relationships_from_x_projection(
+                projection, domain=domain, topics=topics
+            )
+            ingest_relationships(
+                relationships,
+                graph_path=Path(source_graph_path),
+                discovery_ledger_path=Path(discovery_ledger_path),
+                max_items=max(1, min(1000, len(relationships) or 1)),
+            )
         return projection
