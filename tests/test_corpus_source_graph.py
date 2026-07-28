@@ -5,12 +5,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+import corpus_source_graph as source_graph_module
 from corpus_discovery import DiscoveryEngine
 from corpus_engine_models import CandidateObservation
 from corpus_source_graph import (
@@ -44,6 +46,40 @@ class SourceGraphExpansionTests(unittest.TestCase):
         }
         value.update(overrides)
         return value
+
+    def test_interrupted_append_restores_the_exact_valid_graph_prefix(self):
+        ingest_relationships(
+            [self.relation()], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        before = self.graph.read_bytes()
+        real_write = source_graph_module.os.write
+        calls = 0
+
+        def interrupted_write(descriptor, payload):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                real_write(descriptor, payload[: max(1, len(payload) // 2)])
+                raise TimeoutError("injected SIGALRM-equivalent interruption")
+            return real_write(descriptor, payload)
+
+        with patch("corpus_source_graph.os.write", side_effect=interrupted_write):
+            with self.assertRaisesRegex(TimeoutError, "SIGALRM-equivalent"):
+                ingest_relationships(
+                    [
+                        self.relation(
+                            canonical_url="https://example.com/people/second-operator",
+                            title="Second Operator",
+                        )
+                    ],
+                    graph_path=self.graph,
+                    discovery_ledger_path=self.discovery,
+                )
+        self.assertEqual(self.graph.read_bytes(), before)
+        replay = ingest_relationships(
+            [self.relation()], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        self.assertEqual(replay["relationships"], 1)
 
     def test_unseen_entities_from_multiple_source_families_enter_one_candidate_graph(self):
         relationships = [

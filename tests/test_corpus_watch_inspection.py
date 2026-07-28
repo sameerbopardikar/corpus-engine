@@ -53,6 +53,7 @@ class WatchInspectionTests(unittest.TestCase):
         candidate: str = WATCH_SOURCE,
         *,
         rights_state: str = "private_authorized",
+        expected_promoted: int = 1,
     ) -> dict:
         common = {
             "domain": DOMAIN,
@@ -95,7 +96,7 @@ class WatchInspectionTests(unittest.TestCase):
             watch_projection_path=self.watch,
             evaluated_at=EVALUATED_AT,
         )
-        self.assertEqual(result["counts"]["promoted"], 1)
+        self.assertEqual(result["counts"]["promoted"], expected_promoted)
         return result
 
     def artifact(self, **overrides) -> dict:
@@ -220,6 +221,57 @@ class WatchInspectionTests(unittest.TestCase):
             len(self.graph.read_text(encoding="utf-8").splitlines()),
             line_count,
         )
+
+    def test_prepared_replays_share_cycle_cumulative_byte_budget(self):
+        first = WATCH_SOURCE
+        second = "https://github.com/example/second-agent-runtime"
+        self.promote_watch_source(first)
+        policy = self.promote_watch_source(second, expected_promoted=2)
+        work_by_url = {
+            candidate.canonical_url: work.work_id
+            for work in DiscoveryEngine(self.ledger).work_items.values()
+            for candidate in [DiscoveryEngine(self.ledger).candidates[work.candidate_id]]
+        }
+        second_document = json.loads(self.repository_bytes)
+        second_document["repository_url"] = second
+        second_bytes = json.dumps(second_document, sort_keys=True).encode("utf-8")
+        inspections = [
+            {
+                "watch_source_url": first,
+                "artifacts": [self.artifact(artifact_url=first)],
+            },
+            {
+                "watch_source_url": second,
+                "artifacts": [
+                    self.artifact(
+                        artifact_url=second,
+                        content_bytes=second_bytes,
+                        content_sha256=sha256(second_bytes),
+                    )
+                ],
+            },
+        ]
+        for inspection in inspections:
+            with patch(
+                "corpus_watch_inspection.DiscoveryEngine.complete_work",
+                side_effect=OSError("injected completion failure"),
+            ):
+                with self.assertRaisesRegex(OSError, "completion failure"):
+                    self.inspect([inspection])
+
+        cap = len(self.repository_bytes) + len(second_bytes) - 1
+        with self.assertRaisesRegex(
+            WatchInspectionError, "prepared transaction exceeds max_total_artifact_bytes"
+        ):
+            self.inspect(
+                inspections,
+                max_total_artifact_bytes=cap,
+                now=NOW + timedelta(days=1),
+            )
+        engine = DiscoveryEngine(self.ledger)
+        self.assertEqual(engine.work_items[work_by_url[first]].state, "done")
+        self.assertEqual(engine.work_items[work_by_url[second]].state, "pending")
+        self.assertEqual(len(policy["watch_work_ids"]), 2)
 
     def test_child_artifact_linked_from_preserved_parent_bytes_is_admitted(self):
         self.promote_watch_source()

@@ -56,7 +56,7 @@ Use one implementation pass and no more than two adversarial closure passes. Onl
 
 **Test first:** Keep the existing failing candidate-policy and CLI tests red; add replay/day-boundary tests.
 
-**Implementation:** Use the existing `DiscoveryEngine.enqueue_work` contract and stable work identity; do not create a second queue.
+**Implementation:** Use the existing `DiscoveryEngine.enqueue_work` contract and stable work identity; do not create a second queue. The recurring inspection idempotency key is exactly `daily-inspect:<YYYY-MM-DD UTC>`, combined by `WorkItem.create` with domain, candidate ID, and action. Same-candidate replays on one UTC date therefore resolve to the same `work_id`; the next UTC date resolves to a different `work_id`.
 
 **Verification:** Candidate-policy and CLI tests pass; exact replay produces zero new work and a later UTC day can create the next bounded inspection item.
 
@@ -115,6 +115,6 @@ Use one implementation pass and no more than two adversarial closure passes. Onl
 4. If needed, perform one bounded remediation and one final review.
 5. Inspect diff/secrets/status.
 6. Commit the verified tree on `agent/self-expansion-proof` without pushing or deploying unrelated systems.
-7. Write a GBrain completion receipt with exact maturity labels and source pointers.
+7. Write a GBrain completion receipt with exact maturity labels and source pointers. This is an operator-owned post-commit observability/readback step, not a behavioral code-acceptance gate. A GBrain outage records `operational_receipt_pending` and does not invalidate an otherwise accepted immutable commit; it does block claiming end-to-end operational closure until readback succeeds.
 
-**Final verification:** Clean worktree, commit SHA readback, current-byte test receipts, exact scheduled-wrapper receipt, independent no-P0/P1 verdict, and GBrain page readback.
+**Final verification:** Behavioral acceptance requires a clean worktree, commit SHA readback, current-byte test receipts, exact scheduled-wrapper receipt, and independent no-P0/P1 verdict. Operational closure additionally requires the operator-owned GBrain page readback under the failure semantics above.

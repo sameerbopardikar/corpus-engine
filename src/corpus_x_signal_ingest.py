@@ -183,9 +183,11 @@ def ingest_x_signals(
     X posts are preserved verbatim as discovery signals. External links remain
     candidate primary-source locators and authors remain probationary creator
     candidates; neither X-only claims nor linked material become doctrine here.
-    When the graph arguments are supplied, the full projection is reconciled
-    into the shared source graph and DiscoveryEngine without requiring a known
-    topic phrase. All four graph arguments are fail-closed as one configuration.
+    When the graph arguments are supplied, only the current bounded batch is
+    projected into the shared source graph and DiscoveryEngine; durable graph
+    replay handles older signals. ``domain``, ``source_graph_path``, and
+    ``discovery_ledger_path`` are fail-closed as one configuration, while
+    ``topics`` remains optional.
     """
 
     graph_args = (domain, source_graph_path, discovery_ledger_path)
@@ -200,6 +202,17 @@ def ingest_x_signals(
     if len(material) > max_items:
         raise XSignalContractError("signal batch exceeds max_items")
     normalized = [_normalize_signal(item) for item in material]
+
+    graph_relationships = None
+    if domain is not None and source_graph_path is not None and discovery_ledger_path is not None:
+        from corpus_source_graph import relationships_from_x_projection
+
+        batch_projection = _project({signal["url"]: signal for signal in normalized})
+        graph_relationships = relationships_from_x_projection(
+            batch_projection, domain=domain, topics=topics
+        )
+        if len(graph_relationships) > 1000:
+            raise XSignalContractError("current X batch exceeds the 1000-relationship graph bound")
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -227,16 +240,15 @@ def ingest_x_signals(
         if not (output_path.exists() and output_path.read_bytes() == encoded):
             _atomic_write(output_path, encoded)
 
-        if domain is not None and source_graph_path is not None and discovery_ledger_path is not None:
-            from corpus_source_graph import ingest_relationships, relationships_from_x_projection
+        if graph_relationships is not None:
+            from corpus_source_graph import ingest_relationships
 
-            relationships = relationships_from_x_projection(
-                projection, domain=domain, topics=topics
-            )
+            assert source_graph_path is not None
+            assert discovery_ledger_path is not None
             ingest_relationships(
-                relationships,
+                graph_relationships,
                 graph_path=Path(source_graph_path),
                 discovery_ledger_path=Path(discovery_ledger_path),
-                max_items=max(1, min(1000, len(relationships) or 1)),
+                max_items=1000,
             )
         return projection

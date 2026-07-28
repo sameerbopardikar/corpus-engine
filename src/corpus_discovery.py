@@ -574,13 +574,17 @@ class DiscoveryEngine:
         """
         if rights_state not in _RIGHTS_STATES or rights_state == "unknown":
             raise ValueError(f"invalid asserted rights_state: {rights_state!r}")
-        asserted_by = str(asserted_by).strip()
-        basis = str(basis).strip()
-        if not asserted_by or not basis:
+        if not isinstance(asserted_by, str) or not asserted_by.strip():
             raise ValueError("rights assertion requires asserted_by and basis")
+        if not isinstance(basis, str) or not basis.strip():
+            raise ValueError("rights assertion requires asserted_by and basis")
+        asserted_by = asserted_by.strip()
+        basis = basis.strip()
         asserted_at = iso(parse_iso(asserted_at))
         with self._mutation():
-            existing = self.candidates[candidate_id]
+            existing = self.candidates.get(candidate_id)
+            if existing is None:
+                raise ValueError(f"rights assertion references unknown candidate: {candidate_id}")
             if existing.rights_state == rights_state:
                 return existing
             updated = replace(existing, rights_state=rights_state)

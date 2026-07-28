@@ -237,21 +237,39 @@ def _append_new(path: Path, relationships: list[SourceRelationship]) -> int:
         projected = known | batch_ids
         if len(projected) != len(known) + len(novel):
             raise SourceGraphContractError("projected source graph would contain duplicate relation IDs")
-        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+        payload = b"".join(
+            json.dumps(
+                relationship.to_dict(),
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            + b"\n"
+            for relationship in novel
+        )
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
         fd = os.open(path, flags, 0o600)
+        original_size = os.fstat(fd).st_size
         try:
             os.fchmod(fd, 0o600)
-            with os.fdopen(fd, "ab") as handle:
-                for relationship in novel:
-                    encoded = json.dumps(
-                        relationship.to_dict(), sort_keys=True, ensure_ascii=False, allow_nan=False,
-                        separators=(",", ":"),
-                    ).encode("utf-8") + b"\n"
-                    handle.write(encoded)
-                handle.flush()
-                os.fsync(handle.fileno())
+            os.lseek(fd, 0, os.SEEK_END)
+            written = 0
+            try:
+                while written < len(payload):
+                    count = os.write(fd, payload[written:])
+                    if count <= 0:
+                        raise OSError("source graph append made no progress")
+                    written += count
+                os.fsync(fd)
+            except BaseException:
+                # SIGALRM raises in-process. Restore the exact valid prefix before
+                # propagating so the next cycle never sees a truncated JSONL tail.
+                os.ftruncate(fd, original_size)
+                os.fsync(fd)
+                raise
         finally:
-            pass
+            os.close(fd)
         return len(novel)
 
 

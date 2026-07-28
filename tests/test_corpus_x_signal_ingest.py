@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -181,6 +182,39 @@ class XSignalIngestTests(unittest.TestCase):
                     domain="agentic-engineering",
                 )
             self.assertFalse(output.exists())
+
+    def test_graph_expansion_processes_only_the_current_bounded_batch(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "x-signals.json"
+            graph = root / "source-graph.jsonl"
+            discovery = root / "discovery-ledger.jsonl"
+            first = [
+                self.signal(url="https://x.com/builder/status/201"),
+                self.signal(url="https://x.com/builder/status/202"),
+            ]
+            ingest_x_signals(first, output, max_items=10)
+
+            observed_batch_sizes = []
+
+            def current_batch_only(projection, *, domain, topics=()):
+                observed_batch_sizes.append(len(projection["signals"]))
+                return []
+
+            with patch(
+                "corpus_source_graph.relationships_from_x_projection",
+                side_effect=current_batch_only,
+            ):
+                ingest_x_signals(
+                    [self.signal(url="https://x.com/builder/status/203")],
+                    output,
+                    max_items=10,
+                    domain="agentic-engineering",
+                    source_graph_path=graph,
+                    discovery_ledger_path=discovery,
+                )
+            self.assertEqual(observed_batch_sizes, [1])
+            self.assertEqual(len(json.loads(output.read_text())["signals"]), 3)
 
 
 if __name__ == "__main__":

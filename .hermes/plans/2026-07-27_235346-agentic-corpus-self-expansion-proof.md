@@ -162,7 +162,7 @@ Stop rather than overfit if the same failure class persists after three credible
 - Concept success may be a mechanism cluster, not exact phrase guessing.
 - Receipt records discovery path, dispositions, watch delta, second-order discovery, leakage checks, and restart/idempotency hashes.
 
-**Historical regression:** Reconstruct the parent of corpus commit `565150e`; remove post-hoc query additions and graph-engineering synthesis. Because LangGraph already existed in the pre-state, this case tests terminology/source-network emergence, not repository discovery.
+**Historical regression:** Reconstruct the exact parent `de4b5798f8c229b57d98511bb3a284edfbd29f5e` of corpus commit `565150e9dc95c4cde67c4d2cd7e7e7b4ec37c478`. Exclude the five paths changed by that commit (`agentic-engineering/discovery/x-radar/latest-check.json`, `agentic-engineering/discovery/x-radar/signals.json`, `agentic-engineering/registry/sources.json`, `agentic-engineering/sources/zeitgeist/x-agentic-engineering-radar.md`, and `agentic-engineering/sources/zeitgeist/x-heavy-agent-harness-engineering-2081455613075480822.md`). The canonical binary diff for that exclusion set has SHA-256 `5ee0b0f17027c5d8093515f7d98d2a52dc14a53691334cbd3e0c9ee50a7fbb2a`. Remove any separately identified graph-engineering synthesis from the worker-visible packet and record its path and digest in the run receipt. Because LangGraph already existed in the pre-state, this case tests terminology/source-network emergence, not repository discovery.
 
 **Blinded holdout:** An independent evaluator chooses a non-identical target after the engine packet is frozen. The worker receives source artifacts without the target label; the parent evaluator scores the output afterward.
 
@@ -202,15 +202,16 @@ Stop rather than overfit if the same failure class persists after three credible
 - `/root/corpora/agentic-engineering/evals/self-expansion-proof-<date>.json`
 
 **Steps:**
-1. Back up every overlay/prompt file before mutation.
-2. Install only exact reviewed bytes.
-3. Update cron procedure to lease an X query before `x_search`, commit only after signal preservation, and run relationship extraction before completion.
-4. Run four accelerated X leases in isolated state.
-5. Run a production-wrapper planning smoke.
-6. Run one bounded shadow cycle against real corpus sources without production promotion.
-7. Verify file hashes and read back cron configuration.
-8. Commit only the intentional corpus receipt and sync `corpora`.
-9. Push the code branch and update/open the PR. Do not self-merge.
+1. Read the active self-expansion config before mutation and record the effective `enabled` flag. No config path means default-off; malformed/unreadable config is fail-soft and must report `effective_enabled=false` rather than changing scheduled behavior.
+2. Back up every overlay/prompt file before mutation.
+3. Install only exact reviewed bytes.
+4. Update cron procedure to lease an X query before `x_search`, commit only after signal preservation, and run relationship extraction before completion.
+5. Run four accelerated X leases in isolated state.
+6. Run a production-wrapper planning smoke.
+7. Run one bounded shadow cycle against real corpus sources without production promotion.
+8. Verify file hashes, read back cron configuration, and record the post-activation effective self-expansion flag in the deployment receipt. The post value must equal the explicitly configured pre value; activation never silently enables the feature.
+9. Commit only the intentional corpus receipt and sync `corpora`.
+10. Push the code branch and update/open the PR. Do not self-merge.
 
 ---
 

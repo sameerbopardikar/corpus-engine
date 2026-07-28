@@ -185,6 +185,29 @@ class CandidateReplayTests(DiscoveryEngineTestCase):
             "private_authorized",
         )
 
+    def test_rights_assertion_rejects_non_string_provenance_and_unknown_candidate(self):
+        engine = self.engine()
+        observation = make_observation()
+        engine.observe(observation, rights_state="rights_unclear")
+        for asserted_by, basis in ((None, "basis"), ("owner", None), (7, "basis"), ("owner", 7)):
+            with self.subTest(asserted_by=asserted_by, basis=basis):
+                with self.assertRaisesRegex(ValueError, "asserted_by and basis"):
+                    engine.assert_rights(
+                        observation.candidate_key,
+                        "private_authorized",
+                        asserted_by=asserted_by,
+                        basis=basis,
+                        asserted_at="2026-07-16T12:30:00Z",
+                    )
+        with self.assertRaisesRegex(ValueError, "unknown candidate"):
+            engine.assert_rights(
+                "candidate-does-not-exist",
+                "private_authorized",
+                asserted_by="owner",
+                basis="explicit authorization",
+                asserted_at="2026-07-16T12:30:00Z",
+            )
+
     def test_observation_still_cannot_silently_change_rights(self):
         engine = self.engine()
         obs = make_observation()

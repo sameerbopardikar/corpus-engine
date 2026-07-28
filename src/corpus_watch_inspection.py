@@ -477,14 +477,19 @@ def run_watch_inspection(
                         "prepared transaction exceeds max_artifacts_per_inspection"
                     )
                 prepared_bytes = sum(item.byte_length for item in inspection_receipts)
-                if prepared_bytes > max_total_artifact_bytes:
+                if artifact_bytes_total + prepared_bytes > max_total_artifact_bytes:
                     raise WatchInspectionError(
                         "prepared transaction exceeds max_total_artifact_bytes"
                     )
                 if (
-                    len(relationships) > max_total_relationships
+                    derived_total + len(relationships) > max_total_relationships
                     or any(
-                        sum(1 for rel in relationships if rel.discovered_from_url == receipt.artifact_url)
+                        sum(
+                            1
+                            for rel in relationships
+                            if canonical_entity_identity(rel.discovered_from_url)
+                            == receipt.artifact_identity
+                        )
                         > max_relationships_per_artifact
                         for receipt in inspection_receipts
                     )

@@ -131,6 +131,36 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "disabled")
         self.assertEqual(list(self.tmp.iterdir()), [])
 
+    def test_optional_config_failure_is_fail_soft_and_test_clock_is_phase_local(self):
+        config_path = self.tmp / "malformed-self-expansion.json"
+        config_path.write_text("{not-json", encoding="utf-8")
+        budget_path = self.tmp / "budget.json"
+        command = [
+            sys.executable,
+            str(ROOT / "scripts" / "corpus_global_cycle.py"),
+            "--config-dir",
+            str(ROOT / "config" / "domains"),
+            "--budget-path",
+            str(budget_path),
+            "--self-expansion-config",
+            str(config_path),
+            "--self-expansion-now",
+            "2000-01-02T03:04:05Z",
+        ]
+        process = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        summary = json.loads(process.stdout)
+        self.assertEqual(summary["self_expansion"]["status"], "partial_failure")
+        self.assertFalse(summary["self_expansion"]["enabled"])
+        self.assertEqual(
+            summary["self_expansion"]["failures"][0]["code"],
+            "self_expansion_config_unavailable",
+        )
+        self.assertNotIn("20000102", summary["reservation_id"])
+        budget = json.loads(budget_path.read_text(encoding="utf-8"))
+        reservation = next(iter(budget["reservations"].values()))
+        self.assertFalse(reservation["request"]["now"].startswith("2000-01-02"))
+
     def test_state_path_uses_canonical_domain_subroot(self):
         state = self.tmp / "corpora"
         config = _config(state)

@@ -338,10 +338,35 @@ def _default_discover(fetched_at, *, max_bytes=DEFAULT_MAX_BYTES):
 
 def _self_expansion_receipt(config_path: str | None, *, now: datetime) -> dict[str, Any]:
     if not config_path:
-        return {"schema_version": 1, "enabled": False, "status": "disabled", "domains": []}
-    return run_self_expansion_cycle(
-        json.loads(Path(config_path).read_text(encoding="utf-8")), now=now
-    )
+        return {
+            "schema_version": 1,
+            "configured": False,
+            "enabled": False,
+            "status": "disabled",
+            "domains": [],
+        }
+    try:
+        receipt = run_self_expansion_cycle(
+            json.loads(Path(config_path).read_text(encoding="utf-8")), now=now
+        )
+    except Exception as exc:
+        # Self-expansion is an optional recurring phase. A bad optional config
+        # must be visible in the summary without erasing already-completed
+        # acquisition/planning output or preventing compatibility shims.
+        return {
+            "schema_version": 1,
+            "configured": True,
+            "enabled": False,
+            "status": "partial_failure",
+            "domains": [],
+            "failures": [
+                {
+                    "code": "self_expansion_config_unavailable",
+                    "error_type": type(exc).__name__,
+                }
+            ],
+        }
+    return {"configured": True, **receipt}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -365,18 +390,19 @@ def main(argv: list[str] | None = None) -> int:
     # Test-only injected clock. Production omits it and uses UTC now.
     parser.add_argument("--self-expansion-now", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    clock_now = (
+    cycle_now = datetime.now(timezone.utc)
+    self_expansion_now = (
         datetime.fromisoformat(args.self_expansion_now.replace("Z", "+00:00"))
         if args.self_expansion_now
-        else datetime.now(timezone.utc)
+        else cycle_now
     )
-    if clock_now.tzinfo is None or clock_now.utcoffset() is None:
+    if self_expansion_now.tzinfo is None or self_expansion_now.utcoffset() is None:
         parser.error("--self-expansion-now must include a timezone")
     # Reservation requests and discovered candidate timestamps must share one
     # replay-stable cycle clock. Wall-clock seconds/microseconds would make an
     # otherwise identical scheduler retry conflict before idempotency can reuse
     # the acquisition receipt.
-    now = clock_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    now = cycle_now.replace(hour=0, minute=0, second=0, microsecond=0)
     if args.reservation_id:
         reservation_id = args.reservation_id
     else:
@@ -408,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
             "failures": result["failures"],
             "report": result["report"],
             "self_expansion": _self_expansion_receipt(
-                args.self_expansion_config, now=clock_now
+                args.self_expansion_config, now=self_expansion_now
             ),
         }
         print(json.dumps(summary, indent=2))
@@ -427,7 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         "failures": result["failures"],
         "selected_candidate_ids": result["selected_candidate_ids"],
         "self_expansion": _self_expansion_receipt(
-            args.self_expansion_config, now=clock_now
+            args.self_expansion_config, now=self_expansion_now
         ),
     }
     print(json.dumps(summary, indent=2))
