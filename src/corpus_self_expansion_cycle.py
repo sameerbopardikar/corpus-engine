@@ -104,8 +104,26 @@ def _load_config(value: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _paths(state_root: Path, domain: str) -> dict[str, Path]:
-    root = state_root / domain
+def _paths(state_root: Path, domain: str, state_path: str | None = None) -> dict[str, Path]:
+    base = state_root.expanduser().resolve()
+    domain_base = (base / domain).resolve()
+    try:
+        domain_base.relative_to(base)
+    except ValueError as exc:
+        raise SelfExpansionCycleError("domain state root escapes state_root") from exc
+    if state_path is None:
+        root = domain_base
+    else:
+        relative = Path(state_path)
+        if relative.is_absolute() or not relative.parts or relative.parts[0] != domain:
+            raise SelfExpansionCycleError(
+                "state_path must be a relative path rooted beneath its domain"
+            )
+        root = (base / relative).resolve()
+        try:
+            root.relative_to(domain_base)
+        except ValueError as exc:
+            raise SelfExpansionCycleError("state_path escapes its domain state root") from exc
     return {
         "root": root,
         "ledger": root / "discovery-ledger.jsonl",
@@ -167,7 +185,9 @@ def _run_domain(
     if any("relationships" in item for item in inspections if isinstance(item, dict)):
         raise SelfExpansionCycleError("inspection relationships cannot be supplied")
 
-    paths = _paths(Path(config["state_root"]), domain)
+    paths = _paths(
+        Path(config["state_root"]), domain, domain_config.get("state_path")
+    )
     pre_due_engine = DiscoveryEngine(paths["ledger"])
     leased_at_start = {
         item.work_id for item in pre_due_engine.work_items.values() if item.state == "leased"

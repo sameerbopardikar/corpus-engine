@@ -128,6 +128,31 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "disabled")
         self.assertEqual(list(self.tmp.iterdir()), [])
 
+    def test_state_path_uses_canonical_domain_subroot(self):
+        state = self.tmp / "corpora"
+        config = _config(state)
+        config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
+        receipt = run_self_expansion_cycle(config, now=NOW_A)
+        self.assertEqual(receipt["status"], "completed")
+        self.assertTrue(
+            (state / DOMAIN / "self-expansion-v1" / "discovery-ledger.jsonl").is_file()
+        )
+        self.assertFalse((state / DOMAIN / "discovery-ledger.jsonl").exists())
+
+    def test_state_path_cannot_escape_its_domain(self):
+        state = self.tmp / "corpora"
+        sentinel = state / "training" / "sentinel.json"
+        sentinel.parent.mkdir(parents=True)
+        sentinel.write_text('{"authority":"unchanged"}\n')
+        before = sentinel.read_bytes()
+        config = _config(state)
+        config["domains"][0]["state_path"] = f"{DOMAIN}/../../training"
+        receipt = run_self_expansion_cycle(config, now=NOW_A)
+        self.assertEqual(receipt["status"], "partial_failure")
+        self.assertTrue(any("escapes" in item["error"] for item in receipt["failures"]))
+        self.assertEqual(sentinel.read_bytes(), before)
+        self.assertEqual(list((state / "training").iterdir()), [sentinel])
+
     def test_injected_monotonic_clock_enforces_wall_cap(self):
         config = _config(self.tmp / "state")
         ticks = iter([0.0, 21.0])
