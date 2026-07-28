@@ -15,6 +15,7 @@ import os
 import stat
 import uuid
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
@@ -34,6 +35,7 @@ PRIORITY_KEY = "priority_score"
 _REQUIRED_EVENT_FIELDS = ("schema_version", "event_id", "event_type", "recorded_at", "payload")
 _EVENT_TYPES = {
     "candidate_observed",
+    "candidate_rights_asserted",
     "candidate_transitioned",
     "work_enqueued",
     "work_state_changed",
@@ -438,6 +440,28 @@ class DiscoveryEngine:
                         )
                     else:
                         candidates[candidate_id] = candidates[candidate_id].observe(observation)
+                elif event_type == "candidate_rights_asserted":
+                    candidate_id = payload["candidate_id"]
+                    if candidate_id not in candidates:
+                        raise LedgerCorruptionError(
+                            f"rights assertion references unknown candidate: {candidate_id}"
+                        )
+                    prior = payload["prior_rights_state"]
+                    if candidates[candidate_id].rights_state != prior:
+                        raise LedgerCorruptionError(
+                            f"rights assertion prior state mismatch for {candidate_id}"
+                        )
+                    rights_state = payload["rights_state"]
+                    if rights_state not in _RIGHTS_STATES or rights_state == "unknown":
+                        raise LedgerCorruptionError(
+                            f"invalid asserted rights_state: {rights_state!r}"
+                        )
+                    if not payload.get("asserted_by") or not payload.get("basis"):
+                        raise LedgerCorruptionError("rights assertion lacks provenance")
+                    parse_iso(payload["asserted_at"])
+                    candidates[candidate_id] = replace(
+                        candidates[candidate_id], rights_state=rights_state
+                    )
                 elif event_type == "candidate_transitioned":
                     candidate_id = payload["candidate_id"]
                     if candidate_id not in candidates:
@@ -533,6 +557,47 @@ class DiscoveryEngine:
             })
             self.candidates[record.candidate_id] = record
             return record
+
+    def assert_rights(
+        self,
+        candidate_id: str,
+        rights_state: str,
+        *,
+        asserted_by: str,
+        basis: str,
+        asserted_at: str,
+    ) -> CandidateRecord:
+        """Apply an explicit, durable rights assertion with provenance.
+
+        Ordinary observations remain unable to alter rights. This separate event
+        makes an owner or policy assertion auditable, replay-safe, and idempotent.
+        """
+        if rights_state not in _RIGHTS_STATES or rights_state == "unknown":
+            raise ValueError(f"invalid asserted rights_state: {rights_state!r}")
+        if not isinstance(asserted_by, str) or not asserted_by.strip():
+            raise ValueError("rights assertion requires asserted_by and basis")
+        if not isinstance(basis, str) or not basis.strip():
+            raise ValueError("rights assertion requires asserted_by and basis")
+        asserted_by = asserted_by.strip()
+        basis = basis.strip()
+        asserted_at = iso(parse_iso(asserted_at))
+        with self._mutation():
+            existing = self.candidates.get(candidate_id)
+            if existing is None:
+                raise ValueError(f"rights assertion references unknown candidate: {candidate_id}")
+            if existing.rights_state == rights_state:
+                return existing
+            updated = replace(existing, rights_state=rights_state)
+            self.ledger.append("candidate_rights_asserted", {
+                "candidate_id": candidate_id,
+                "prior_rights_state": existing.rights_state,
+                "rights_state": rights_state,
+                "asserted_by": asserted_by,
+                "basis": basis,
+                "asserted_at": asserted_at,
+            })
+            self.candidates[candidate_id] = updated
+            return updated
 
     def transition_candidate(
         self,

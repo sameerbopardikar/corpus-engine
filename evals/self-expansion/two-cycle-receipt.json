@@ -1,0 +1,84 @@
+{
+  "base_commit_at_run": "55702d380a2c97d63a4d30a96261e99677b6672f",
+  "command": "python scripts/corpus_self_expansion_proof.py --config evals/self-expansion/fixtures/two-cycle-proof-config.json --run-root <isolated-run-root>",
+  "cycle_a": {
+    "promoted_watch_urls": [
+      "https://example.org/people/maya-chen"
+    ],
+    "relationship_source": "packet_declared",
+    "rights_assertions": [
+      {
+        "canonical_url": "https://example.org/people/maya-chen",
+        "rights_state": "private_authorized"
+      }
+    ],
+    "watch_work_ids": [
+      "work_eea5a99f4ba1d686059c2621"
+    ]
+  },
+  "cycle_b": {
+    "artifact_receipts": [
+      {
+        "artifact_identity": "https://example.org/people/maya-chen",
+        "artifact_url": "https://example.org/people/maya-chen",
+        "binding": "watch_source_identity",
+        "byte_length": 203,
+        "fetched_at": "2026-07-27T21:30:00Z",
+        "parent_artifact_sha256": null,
+        "schema_version": 1,
+        "sha256": "ce813a12ca1094c76b60dacedac11e97480c5c15bfe0da746af2337c34da9c15",
+        "source_family": "engineering-notes",
+        "source_revision": "frozen-fixture-1",
+        "transport": "fixture-inline",
+        "watch_candidate_id": "cand_56323b1458132638fbdea4c1",
+        "watch_source_url": "https://example.org/people/maya-chen",
+        "work_id": "work_eea5a99f4ba1d686059c2621"
+      },
+      {
+        "artifact_identity": "https://example.org/people/maya-chen/notes/recovery-controller",
+        "artifact_url": "https://example.org/people/maya-chen/notes/recovery-controller",
+        "binding": "parent_artifact_link",
+        "byte_length": 310,
+        "fetched_at": "2026-07-27T21:30:00Z",
+        "parent_artifact_sha256": "ce813a12ca1094c76b60dacedac11e97480c5c15bfe0da746af2337c34da9c15",
+        "schema_version": 1,
+        "sha256": "83bc5b9b2fb552e7bdd182a47f4164ceec36af019f5936296a29ccde56ca70e6",
+        "source_family": "engineering-notes",
+        "source_revision": "frozen-fixture-1",
+        "transport": "fixture-inline",
+        "watch_candidate_id": "cand_56323b1458132638fbdea4c1",
+        "watch_source_url": "https://example.org/people/maya-chen",
+        "work_id": "work_eea5a99f4ba1d686059c2621"
+      }
+    ],
+    "consumed_work_ids": [
+      "work_eea5a99f4ba1d686059c2621"
+    ],
+    "relationships_derived": 1,
+    "relationships_supplied_by_packet": 0,
+    "second_order_candidate_urls": [
+      "https://github.com/example/recovery-controller"
+    ]
+  },
+  "gates": {
+    "candidate_promotion": true,
+    "durable_inspection": true,
+    "leakage_absent": true,
+    "recursive_expansion": true,
+    "rights_preserved": true,
+    "unknown_concept": true
+  },
+  "identical_ignoring_local_preservation_paths": true,
+  "kind": "isolated_exact_two_cycle_proof",
+  "overall_status": "passed",
+  "runs": 2,
+  "schema_version": 2,
+  "shared_production_state_touched": false,
+  "worker_visible_sha256": "57578c851b7a4457c0733402d517e86a5a82e2f84926273f9c19991814edf727",
+  "working_tree_manifest_excluding_this_receipt": {
+    "evals/self-expansion/run-ledger.md": "0d8e86d9247e94a21c93b57f85bab3fab0a5086f01828b49c3f762e1df6abe9a",
+    "src/corpus_relationship_extraction.py": "4bab81bee1228cb3a85d220858d0605e0d2b2cdf560728617ecd7649910bb297",
+    "tests/test_corpus_relationship_extraction.py": "2f9c76f99e24d4ff246f4644536d63e219d31771113dc95f1cd876422661561e"
+  },
+  "working_tree_manifest_sha256": "53694d053a16157328f01d502861687ec97b91205779a4e095a0f3730a98d3c1"
+}

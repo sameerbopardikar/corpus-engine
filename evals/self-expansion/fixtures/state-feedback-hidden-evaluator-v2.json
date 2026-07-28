@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-07-28T06:25:49Z",
+  "target_label": "Co-authored execution-state feedback loop",
+  "accepted_close_labels": [
+    "bidirectional external state loop",
+    "human-agent state feedback",
+    "shared mutable execution context"
+  ],
+  "forbidden_seed_terms": [
+    "co-authored",
+    "bidirectional external state",
+    "execution-state feedback",
+    "human-agent state feedback"
+  ],
+  "required_mechanism_dimensions": [
+    "mutable working-state artifact outside chat history",
+    "state from prior commands or tool output is explicitly loaded into later model context",
+    "both human and agent can change the same working state",
+    "intent, command, output, correction, and rerun form one inspectable state flow",
+    "continuity survives fresh assistant executions",
+    "the mechanism improves correction and multi-step engineering without reconstructing context"
+  ],
+  "required_lineage_urls": [
+    "https://www.youtube.com/watch?v=090oR--s__8",
+    "https://www.youtube.com/watch?v=4SnvMieJiuw",
+    "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+  ],
+  "acceptance_rule": "Pass only if one concept candidate, without naming help from this evaluator, recovers at least five of six mechanism dimensions and project_lineage connects at least one Cycle-A artifact to the Cycle-B implementation. Exact target-label guessing is optional. Evidence URLs must be present in the frozen worker packet."
+}

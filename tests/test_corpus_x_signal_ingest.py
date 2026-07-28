@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from corpus_source_graph import SourceGraphContractError
 from corpus_x_signal_ingest import XSignalContractError, ingest_x_signals
 
 
@@ -140,6 +143,134 @@ class XSignalIngestTests(unittest.TestCase):
                 ingest_x_signals([self.signal()], output, max_items=0)
             with self.assertRaisesRegex(XSignalContractError, "exceeds max_items"):
                 ingest_x_signals([self.signal(), self.signal(url="https://x.com/builder/status/103")], output, max_items=1)
+    def test_optional_source_graph_expansion_adds_unknown_author_and_linked_repo_candidates(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "x-signals.json"
+            graph = root / "source-graph.jsonl"
+            discovery = root / "discovery-ledger.jsonl"
+            signal = self.signal(
+                author="@unseen_operator",
+                text="We changed the runtime shape.",
+                linked_primary_sources=["https://github.com/newco/new-runtime/tree/abc123"],
+            )
+
+            ingest_x_signals(
+                [signal],
+                output,
+                max_items=10,
+                domain="agentic-engineering",
+                source_graph_path=graph,
+                discovery_ledger_path=discovery,
+            )
+
+            from corpus_discovery import DiscoveryEngine
+
+            candidates = DiscoveryEngine(discovery).candidates.values()
+            urls = {candidate.canonical_url for candidate in candidates}
+            self.assertEqual(
+                urls,
+                {"https://x.com/unseen_operator", "https://github.com/newco/new-runtime"},
+            )
+            self.assertNotIn("graph engineering", graph.read_text(encoding="utf-8").lower())
+
+    def test_partial_source_graph_configuration_fails_closed_before_projection_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td) / "x-signals.json"
+            with self.assertRaisesRegex(XSignalContractError, "must be supplied together"):
+                ingest_x_signals(
+                    [self.signal()],
+                    output,
+                    domain="agentic-engineering",
+                )
+            self.assertFalse(output.exists())
+
+    def test_graph_fifo_fails_before_publishing_the_x_projection(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "x-signals.json"
+            graph = root / "source-graph.jsonl"
+            discovery = root / "discovery-ledger.jsonl"
+            ingest_x_signals([self.signal()], output, max_items=10)
+            before = output.read_bytes()
+            os.mkfifo(graph, 0o600)
+            with self.assertRaisesRegex(SourceGraphContractError, "regular non-symlink"):
+                ingest_x_signals(
+                    [
+                        self.signal(
+                            url="https://x.com/builder/status/204",
+                            thread_id="x-thread-204",
+                        )
+                    ],
+                    output,
+                    max_items=10,
+                    domain="agentic-engineering",
+                    source_graph_path=graph,
+                    discovery_ledger_path=discovery,
+                )
+            self.assertEqual(output.read_bytes(), before)
+            self.assertFalse(discovery.exists())
+
+    def test_projection_and_projection_lock_fifos_reject_immediately(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for output, fifo in (
+                (root / "projection-fifo.json", root / "projection-fifo.json"),
+                (
+                    root / "lock-fifo.json",
+                    root / "lock-fifo.json.lock",
+                ),
+            ):
+                os.mkfifo(fifo, 0o600)
+                with self.assertRaisesRegex(XSignalContractError, "regular non-symlink"):
+                    ingest_x_signals([self.signal()], output, max_items=10)
+
+    def test_symlinked_parent_component_cannot_redirect_projection_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            trusted = root / "trusted"
+            outside = root / "outside"
+            trusted.mkdir()
+            outside.mkdir()
+            (trusted / "link").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(XSignalContractError, "parent authority"):
+                ingest_x_signals(
+                    [self.signal()], trusted / "link" / "x-signals.json", max_items=10
+                )
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_graph_expansion_processes_only_the_current_bounded_batch(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "x-signals.json"
+            graph = root / "source-graph.jsonl"
+            discovery = root / "discovery-ledger.jsonl"
+            first = [
+                self.signal(url="https://x.com/builder/status/201"),
+                self.signal(url="https://x.com/builder/status/202"),
+            ]
+            ingest_x_signals(first, output, max_items=10)
+
+            observed_batch_sizes = []
+
+            def current_batch_only(projection, *, domain, topics=()):
+                observed_batch_sizes.append(len(projection["signals"]))
+                return []
+
+            with patch(
+                "corpus_source_graph.relationships_from_x_projection",
+                side_effect=current_batch_only,
+            ):
+                ingest_x_signals(
+                    [self.signal(url="https://x.com/builder/status/203")],
+                    output,
+                    max_items=10,
+                    domain="agentic-engineering",
+                    source_graph_path=graph,
+                    discovery_ledger_path=discovery,
+                )
+            self.assertEqual(observed_batch_sizes, [1])
+            self.assertEqual(len(json.loads(output.read_text())["signals"]), 3)
 
 
 if __name__ == "__main__":

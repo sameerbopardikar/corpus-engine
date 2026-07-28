@@ -29,6 +29,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SRC = _REPO_ROOT / "src"
@@ -63,6 +64,7 @@ CandidateRecord = corpus_priority.CandidateRecord
 from corpus_rights_resolver import resolve_rights
 from corpus_scholarly_discovery import discover_europepmc, discover_scholarly
 from corpus_seed_loader import load_candidate_seed
+from corpus_self_expansion_cycle import run_self_expansion_cycle
 
 DEFAULT_CONFIG_DIR = _REPO_ROOT / "config" / "domains"
 # One shared budget authority for the whole engine — never per-domain.
@@ -334,6 +336,39 @@ def _default_discover(fetched_at, *, max_bytes=DEFAULT_MAX_BYTES):
     return discover
 
 
+def _self_expansion_receipt(config_path: str | None, *, now: datetime) -> dict[str, Any]:
+    if not config_path:
+        return {
+            "schema_version": 1,
+            "configured": False,
+            "enabled": False,
+            "status": "disabled",
+            "domains": [],
+        }
+    try:
+        receipt = run_self_expansion_cycle(
+            json.loads(Path(config_path).read_text(encoding="utf-8")), now=now
+        )
+    except Exception as exc:
+        # Self-expansion is an optional recurring phase. A bad optional config
+        # must be visible in the summary without erasing already-completed
+        # acquisition/planning output or preventing compatibility shims.
+        return {
+            "schema_version": 1,
+            "configured": True,
+            "enabled": False,
+            "status": "partial_failure",
+            "domains": [],
+            "failures": [
+                {
+                    "code": "self_expansion_config_unavailable",
+                    "error_type": type(exc).__name__,
+                }
+            ],
+        }
+    return {"configured": True, **receipt}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run one global corpus cycle across all enabled domains.")
     parser.add_argument("--config-dir", default=str(DEFAULT_CONFIG_DIR))
@@ -348,13 +383,26 @@ def main(argv: list[str] | None = None) -> int:
         help="Corpora root; each domain gets isolated roots under <corpora-root>/<domain> (execute mode only).",
     )
     parser.add_argument("--corpus-revision", default="unknown")
+    parser.add_argument(
+        "--self-expansion-config",
+        help="Optional bounded self-expansion configuration for this normal global cycle.",
+    )
+    # Test-only injected clock. Production omits it and uses UTC now.
+    parser.add_argument("--self-expansion-now", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    clock_now = datetime.now(timezone.utc)
+    cycle_now = datetime.now(timezone.utc)
+    self_expansion_now = (
+        datetime.fromisoformat(args.self_expansion_now.replace("Z", "+00:00"))
+        if args.self_expansion_now
+        else cycle_now
+    )
+    if self_expansion_now.tzinfo is None or self_expansion_now.utcoffset() is None:
+        parser.error("--self-expansion-now must include a timezone")
     # Reservation requests and discovered candidate timestamps must share one
     # replay-stable cycle clock. Wall-clock seconds/microseconds would make an
     # otherwise identical scheduler retry conflict before idempotency can reuse
     # the acquisition receipt.
-    now = clock_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    now = cycle_now.replace(hour=0, minute=0, second=0, microsecond=0)
     if args.reservation_id:
         reservation_id = args.reservation_id
     else:
@@ -385,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
             "domains_planned": result["domains_planned"],
             "failures": result["failures"],
             "report": result["report"],
+            "self_expansion": _self_expansion_receipt(
+                args.self_expansion_config, now=self_expansion_now
+            ),
         }
         print(json.dumps(summary, indent=2))
         return 0
@@ -401,6 +452,9 @@ def main(argv: list[str] | None = None) -> int:
         "domains_planned": result["domains_planned"],
         "failures": result["failures"],
         "selected_candidate_ids": result["selected_candidate_ids"],
+        "self_expansion": _self_expansion_receipt(
+            args.self_expansion_config, now=self_expansion_now
+        ),
     }
     print(json.dumps(summary, indent=2))
     return 0

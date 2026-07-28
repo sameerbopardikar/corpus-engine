@@ -1,0 +1,12 @@
+{
+  "repository_url": "https://github.com/example/agent-runtime",
+  "owner": {"login": "example", "html_url": "https://github.com/example"},
+  "contributors": [
+    {"login": "maintainer-one", "html_url": "https://github.com/maintainer-one"},
+    {"login": "maintainer-two", "html_url": "https://github.com/maintainer-two"}
+  ],
+  "dependencies": [
+    "https://github.com/example/replay-core",
+    "https://github.com/other/state-store"
+  ]
+}

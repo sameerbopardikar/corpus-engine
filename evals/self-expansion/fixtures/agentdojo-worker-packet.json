@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "worker_instruction": "Using only this packet, identify one important engineering mechanism that becomes visible after the promoted Cycle A source is inspected in Cycle B. Do not invent a label from outside knowledge. Return a concise mechanism statement grounded in the supplied text and list the exact Cycle B artifact URL as evidence. Also list the people, paper, and results source exposed by Cycle B.",
+  "seed_packet": {
+    "registry": [
+      "official agent framework repositories",
+      "official tool-use documentation",
+      "practitioner engineering channels"
+    ],
+    "ontology": [
+      "agent lifecycle",
+      "tool use",
+      "reliability",
+      "verification",
+      "safety control security",
+      "evaluation observability"
+    ],
+    "queries": [
+      "agent security benchmark",
+      "LLM agent reliability evaluation"
+    ]
+  },
+  "cycle_a_artifacts": [
+    {
+      "source_family": "paper",
+      "url": "https://arxiv.org/abs/2406.13352",
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": [
+        "Edoardo Debenedetti",
+        "Jie Zhang",
+        "Mislav Balunović",
+        "Luca Beurer-Kellner",
+        "Marc Fischer",
+        "Florian Tramèr"
+      ],
+      "text": "AI agents aim to solve complex tasks by combining text-based reasoning with external tool calls. Unfortunately, AI agents are vulnerable to prompt injection attacks where data returned by external tools hijacks the agent to execute malicious tasks. To measure the adversarial robustness of AI agents, we introduce AgentDojo, an evaluation framework for agents that execute tools over untrusted data. To capture the evolving nature of attacks and defenses, AgentDojo is not a static test suite, but rather an extensible environment for designing and evaluating new agent tasks, defenses, and adaptive attacks. We populate the environment with 97 realistic tasks (e.g., managing an email client, navigating an e-banking website, or making travel bookings), 629 security test cases, and various attack and defense paradigms from the literature. We find that AgentDojo poses a challenge for both attacks and defenses: state-of-the-art LLMs fail at many tasks (even in the absence of attacks), and existing prompt injection attacks break some security properties but not all. We hope that AgentDojo can foster research on new design principles for AI agents that solve common tasks in a reliable and robust manner.. We release the code for AgentDojo at https://github.com/ethz-spylab/agentdojo.",
+      "source_sha256": "48097b3ef93c7d51379927c6ad38d8e008f51d41dba9d3063869da5b06a254e3"
+    },
+    {
+      "source_family": "github-search",
+      "url": "https://api.github.com/search/repositories?q=agent%20security%20benchmark",
+      "title": "ethz-spylab/agentdojo",
+      "text": "A Dynamic Environment to Evaluate Attacks and Defenses for LLM Agents.",
+      "candidate_url": "https://github.com/ethz-spylab/agentdojo",
+      "source_sha256": "59adcc15f1c6231f1d8e102c5d731dc678a5ef0900ce5528b5cdc7e059fdaafa"
+    }
+  ],
+  "cycle_b_artifacts": [
+    {
+      "watch_source_url": "https://github.com/ethz-spylab/agentdojo",
+      "url": "https://github.com/ethz-spylab/agentdojo",
+      "text": "\n<center>\n\n# AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents\n\n![GitHub License](https://img.shields.io/github/license/ethz-spylab/agentdojo) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ethz-spylab/agentdojo/lint-docs.yaml)\n ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/agentdojo) ![PyPI - Downloads](https://img.shields.io/pypi/dm/agentdojo) ![PyPI - Version](https://img.shields.io/pypi/v/agentdojo)\n\n\n\n[Edoardo Debenedetti](https://edoardo.science)<sup>1</sup>, [Jie Zhang](https://zj-jayzhang.github.io)<sup>1</sup>, [Mislav Balunović](https://www.sri.inf.ethz.ch/people/mislav)<sup>1,2</sup>, [Luca Beurer-Kellner](https://www.sri.inf.ethz.ch/people/luca)<sup>1,2</sup>, [Marc Fischer](https://marcfischer.at)<sup>1,2</sup>, [Florian Tramèr](https://floriantramer.com)<sup>1</sup>\n\n<sup>1</sup>ETH Zurich and <sup>2</sup>Invariant Labs\n\n[Read Paper](https://arxiv.org/abs/2406.13352) | [Inspect Results](https://agentdojo.spylab.ai/results/)\n</center>\n\n## Quickstart\n\n```bash\npip install agentdojo\n```\n\n> [!IMPORTANT]\n> Note that the API of the package is still under development and might change in the future.\n\nIf you want to use the prompt injection detector, you need to install the `transformers` extra:\n\n```bash\npip install \"agentdojo[transformers]\"\n```\n\n## Running the benchmark\n\nThe benchmark can be run with the [benchmark](src/agentdojo/scripts/benchmark.py) script. Documentation on how to use the script can be obtained with the `--help` flag.\n\nFor example, to run the `workspace` suite on the tasks 0 and 1, with `gpt-4o-2024-05-13` as the LLM, the tool filter as a defense, and the attack with tool knowlege, run the following command:\n\n```bash\npython -m agentdojo.scripts.benchmark -s workspace -ut user_task_0 \\\n    -ut user_task_1 --model gpt-4o-2024-05-13 \\\n    --defense tool_filter --attack tool_knowledge\n```\n\nTo run the above, but on all suites and tasks, run the following:\n\n```bash\npython -m agentdojo.scripts.benchmark --model gpt-4o-2024-05-13 \\\n    --defense tool_filter --attack tool_knowledge\n```\n\n## Inspect the results\n\nTo inspect the results, go to the dedicated [results page](https://agentdojo.spylab.ai/results/) of the documentation. AgentDojo results are also listed in the [Invariant Benchmark Registry](https://explorer.invariantlabs.ai/benchmarks/).Agent\n\n## Documentation of the Dojo\n\nTake a look at our [documentation](https://agentdojo.spylab.ai/).\n\n## Development set-up\n\nTake a look at the [development set-up](https://agentdojo.spylab.ai/development/) docs.\n\n## Citing\n\nIf you use AgentDojo in your research, please consider citing our paper:\n\n```bibtex\n@inproceedings{\n debenedetti2024agentdojo,\n title={AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for {LLM} Agents},\n author={Edoardo Debenedetti and Jie Zhang and Mislav Balunovic and Luca Beurer-Kellner and Marc Fischer and Florian Tram{\\`e}r},\n booktitle={The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks Track},\n year={2024},\n url={https://openreview.net/forum?id=m1YYAQjO3w}\n}\n```\n\n",
+      "source_sha256": "3e3e23e058e626dffa2dde142675591755a41c9cc0cdc8b2d3f913b3f583c063"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "passed": true,
+  "best_candidate_index": 0,
+  "recovered_dimensions": [
+    "mutable working-state artifact outside chat history",
+    "state from prior commands or tool output is explicitly loaded into later model context",
+    "both human and agent can change the same working state",
+    "intent, command, output, correction, and rerun form one inspectable state flow",
+    "continuity survives fresh assistant executions",
+    "the mechanism improves correction and multi-step engineering without reconstructing context"
+  ],
+  "missing_dimensions": [],
+  "dimension_count": 6,
+  "lineage_passed": true,
+  "evidence_urls_valid": true,
+  "target_label_guessed": false,
+  "rationale": "Candidate 0 recovers all six required mechanism dimensions without relying on the evaluator label: it identifies a persistent editable artifact outside dialogue; explicit reinjection of prior scratchpad and tool state into the next prompt; shared human/agent mutation; an inspectable request-command-output-human-correction-next-execution loop; continuity across later assistant executions; and correction plus multi-step continuity without restating context. Every evidence URL used by all candidates is present in the frozen worker packet. All three required lineage URLs are present there, and project_lineage connects both Cycle-A artifacts to the Cycle-B implementation. The acceptance threshold is therefore met. Exact target-label guessing was not used. Receipt saved at /root/workspace/self-expanding-corpus-engine/.worktrees/self-expansion-proof/evals/self-expansion/state-feedback-holdout-v2-evaluation.json."
+}

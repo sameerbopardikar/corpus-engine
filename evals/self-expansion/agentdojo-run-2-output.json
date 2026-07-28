@@ -1,0 +1,323 @@
+{
+  "cycle_a": {
+    "candidate_count": 1,
+    "policy": {
+      "counts": {
+        "blocked": 0,
+        "discovered": 0,
+        "probationary": 0,
+        "promoted": 1,
+        "rejected": 0
+      },
+      "dispositions": [
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_401c1de2540153856787b121",
+          "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+          "corroboration_used": 0.45,
+          "entity_type": "repository",
+          "evidence_lanes": [
+            "security-evaluation"
+          ],
+          "independent_evidence_pointers": 2,
+          "independent_source_families": 2,
+          "occurrences": 2,
+          "quality": 0.681,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github-search",
+            "paper"
+          ],
+          "status_after": "promoted"
+        }
+      ],
+      "evaluated_at": "2026-07-28T00:25:00Z",
+      "policy": {
+        "probation_quality": 0.45,
+        "promotion_evidence_pointers": 2,
+        "promotion_occurrences": 2,
+        "promotion_quality": 0.58,
+        "promotion_source_families": 2,
+        "rejection_quality": 0.2
+      },
+      "schema_version": 1,
+      "watch_entries": [
+        {
+          "candidate_id": "cand_401c1de2540153856787b121",
+          "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+          "entity_type": "repository",
+          "evaluated_at": "2026-07-28T00:25:00Z",
+          "promoted_by": "candidate-policy-v1",
+          "quality": 0.681,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github-search",
+            "paper"
+          ]
+        }
+      ]
+    },
+    "promoted_watch_urls": [
+      "https://github.com/ethz-spylab/agentdojo"
+    ],
+    "relationships_ingested": 2,
+    "unseeded_promoted_watch_urls": [
+      "https://github.com/ethz-spylab/agentdojo"
+    ]
+  },
+  "cycle_b": {
+    "declared_batches": 1,
+    "policy": {
+      "counts": {
+        "blocked": 0,
+        "discovered": 0,
+        "probationary": 8,
+        "promoted": 1,
+        "rejected": 0
+      },
+      "dispositions": [
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_26e81ed40b7fedac11f33d1a",
+          "canonical_url": "https://floriantramer.com",
+          "corroboration_used": 0.2,
+          "entity_type": "creator",
+          "evidence_lanes": [],
+          "independent_evidence_pointers": 0,
+          "independent_source_families": 0,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_401c1de2540153856787b121",
+          "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+          "corroboration_used": 0.45,
+          "entity_type": "repository",
+          "evidence_lanes": [
+            "security-evaluation"
+          ],
+          "independent_evidence_pointers": 2,
+          "independent_source_families": 2,
+          "occurrences": 2,
+          "quality": 0.681,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github-search",
+            "paper"
+          ],
+          "status_after": "promoted"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_440bc6d765aaabbfea6f0d5f",
+          "canonical_url": "https://edoardo.science",
+          "corroboration_used": 0.2,
+          "entity_type": "creator",
+          "evidence_lanes": [],
+          "independent_evidence_pointers": 0,
+          "independent_source_families": 0,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_55c46f8a7042538b27f880d4",
+          "canonical_url": "https://www.sri.inf.ethz.ch/people/luca",
+          "corroboration_used": 0.2,
+          "entity_type": "creator",
+          "evidence_lanes": [
+            "security-evaluation"
+          ],
+          "independent_evidence_pointers": 1,
+          "independent_source_families": 1,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github"
+          ],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_717a6ece714025b7fd327c01",
+          "canonical_url": "https://agentdojo.spylab.ai/results",
+          "corroboration_used": 0.2,
+          "entity_type": "document",
+          "evidence_lanes": [
+            "security-evaluation"
+          ],
+          "independent_evidence_pointers": 1,
+          "independent_source_families": 1,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github"
+          ],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_821c51525477a9318ad45f3c",
+          "canonical_url": "https://www.sri.inf.ethz.ch/people/mislav",
+          "corroboration_used": 0.2,
+          "entity_type": "creator",
+          "evidence_lanes": [
+            "security-evaluation"
+          ],
+          "independent_evidence_pointers": 1,
+          "independent_source_families": 1,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github"
+          ],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_c4c4a679d067b96764edc7ff",
+          "canonical_url": "https://zj-jayzhang.github.io",
+          "corroboration_used": 0.2,
+          "entity_type": "creator",
+          "evidence_lanes": [],
+          "independent_evidence_pointers": 0,
+          "independent_source_families": 0,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_cd49faae86658c7dbb34d88c",
+          "canonical_url": "https://arxiv.org/abs/2406.13352",
+          "corroboration_used": 0.2,
+          "entity_type": "paper",
+          "evidence_lanes": [
+            "security-evaluation"
+          ],
+          "independent_evidence_pointers": 1,
+          "independent_source_families": 1,
+          "occurrences": 1,
+          "quality": 0.645,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github"
+          ],
+          "status_after": "probationary"
+        },
+        {
+          "authority_used": 0.85,
+          "candidate_id": "cand_d4360fb4bf65ff852e36ce1f",
+          "canonical_url": "https://marcfischer.at",
+          "corroboration_used": 0.2,
+          "entity_type": "creator",
+          "evidence_lanes": [],
+          "independent_evidence_pointers": 0,
+          "independent_source_families": 0,
+          "occurrences": 1,
+          "quality": 0.575,
+          "rejection_reason": null,
+          "rights_state": "rights_unclear",
+          "source_families": [],
+          "status_after": "probationary"
+        }
+      ],
+      "evaluated_at": "2026-07-28T00:25:00Z",
+      "policy": {
+        "probation_quality": 0.45,
+        "promotion_evidence_pointers": 2,
+        "promotion_occurrences": 2,
+        "promotion_quality": 0.58,
+        "promotion_source_families": 2,
+        "rejection_quality": 0.2
+      },
+      "schema_version": 1,
+      "watch_entries": [
+        {
+          "candidate_id": "cand_401c1de2540153856787b121",
+          "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+          "entity_type": "repository",
+          "evaluated_at": "2026-07-28T00:25:00Z",
+          "promoted_by": "candidate-policy-v1",
+          "quality": 0.681,
+          "rights_state": "rights_unclear",
+          "source_families": [
+            "github-search",
+            "paper"
+          ]
+        }
+      ]
+    },
+    "processed_artifact_urls": [
+      "https://github.com/ethz-spylab/agentdojo"
+    ],
+    "processed_batches": 1,
+    "second_order_candidate_urls": [
+      "https://agentdojo.spylab.ai/results",
+      "https://arxiv.org/abs/2406.13352",
+      "https://edoardo.science",
+      "https://floriantramer.com",
+      "https://marcfischer.at",
+      "https://www.sri.inf.ethz.ch/people/luca",
+      "https://www.sri.inf.ethz.ch/people/mislav",
+      "https://zj-jayzhang.github.io"
+    ],
+    "skipped_unpromoted_sources": []
+  },
+  "domain": "agentic-engineering",
+  "evaluated_at": "2026-07-28T00:25:00Z",
+  "gates": {
+    "candidate_promotion": true,
+    "leakage_absent": true,
+    "recursive_expansion": true,
+    "rights_preserved": true,
+    "unknown_concept": false
+  },
+  "overall_status": "failed",
+  "schema_version": 1,
+  "target_leakage": {
+    "leaked_terms": [],
+    "seed_packet_frozen": true
+  },
+  "unknown_concept": {
+    "evidence_grounded": true,
+    "exact_target_label_guessed": false,
+    "grounded_candidates": [
+      {
+        "evidence_pointers": [
+          "https://github.com/ethz-spylab/agentdojo"
+        ],
+        "statement": "AgentDojo exposes a configurable benchmark runner that composes a selected task suite and user tasks with a specified LLM, defense, and attack—such as a tool-filter defense against a tool-knowledge attack—and can scale the same configuration across all suites and tasks, with outputs inspectable through a dedicated results page and benchmark registry."
+      }
+    ],
+    "matching_candidates": [],
+    "mechanism_cluster_matched": false,
+    "required_mechanisms": [
+      "untrusted",
+      "attacks",
+      "defenses",
+      "tasks"
+    ]
+  }
+}

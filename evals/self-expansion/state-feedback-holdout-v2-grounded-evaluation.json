@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "evaluation_id": "state-feedback-holdout-v2-grounded-evaluation",
+  "evaluation_mode": "independent-post-hoc-exact-byte-grounding",
+  "verdict": "pass",
+  "pass": true,
+  "acceptance_summary": {
+    "required_dimension_count": 6,
+    "recovered_and_exactly_bound_dimension_count": 6,
+    "minimum_required": 5,
+    "first_two_required_dimensions_exactly_bound": true,
+    "all_worker_evidence_urls_present_in_packet": true,
+    "all_required_lineage_urls_present_in_packet": true,
+    "lineage_passes": true
+  },
+  "source_input_sha256_utf8": {
+    "hidden_evaluator": "ba8ca3ff04945971c5c181c98243b547bf7778424aa5b88717a1fd30607bd9a5",
+    "worker_packet": "d705e0853f3315aaa327df22bdd6a7f486f10a5ec40b27a4824e5929fce57a3c",
+    "worker_output": "46ac64f1800174ccce3eb80b753d302fdd448063e95e0f7c9f1eb5b8153a6c88"
+  },
+  "artifact_text_definition": "The full exact artifact text is the transcript_excerpt string stored for that URL in the frozen worker packet; hashes are SHA-256 over that complete string encoded as UTF-8, and character spans use Python/JSON Unicode string indices with an exclusive end.",
+  "dimension_bindings": [
+    {
+      "dimension_index": 1,
+      "required_dimension": "mutable working-state artifact outside chat history",
+      "recovered": true,
+      "candidate_index": 0,
+      "artifact_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "artifact_text_field": "cycle_b_artifacts[].transcript_excerpt",
+      "artifact_text_sha256_utf8": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "artifact_text_character_count": 11996,
+      "quote": "every time our AI assistant ran it was generating output and attaching it to the scratch Pad this is a super important pattern because it gives your personal AI assistant active memory this is why I was saying three and a half Essential Elements the active memory lets your personal AI assistant be updated with information that it gives but also really importantly information that you give",
+      "character_span": [
+        582,
+        973
+      ],
+      "span_validation": true
+    },
+    {
+      "dimension_index": 2,
+      "required_dimension": "state from prior commands or tool output is explicitly loaded into later model context",
+      "recovered": true,
+      "candidate_index": 0,
+      "artifact_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "artifact_text_field": "cycle_b_artifacts[].transcript_excerpt",
+      "artifact_text_sha256_utf8": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "artifact_text_character_count": 11996,
+      "quote": "we're passing in a couple variables the path to our typer file the path to our scratch pad and our execution mode okay so if we look at the variables to this we're effectively taking these variables loading them and then inside of our\n\n**[00:18:38]** prompt replacing them right so here's our type of commands here's our context files here's our scratch Pad super important and then here's our of course natural language request",
+      "character_span": [
+        11216,
+        11644
+      ],
+      "span_validation": true
+    },
+    {
+      "dimension_index": 3,
+      "required_dimension": "both human and agent can change the same working state",
+      "recovered": true,
+      "candidate_index": 0,
+      "artifact_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "artifact_text_field": "cycle_b_artifacts[].transcript_excerpt",
+      "artifact_text_sha256_utf8": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "artifact_text_character_count": 11996,
+      "quote": "the active memory lets your personal AI assistant be updated with information that it gives but also really importantly information that you give",
+      "character_span": [
+        828,
+        973
+      ],
+      "span_validation": true
+    },
+    {
+      "dimension_index": 4,
+      "required_dimension": "intent, command, output, correction, and rerun form one inspectable state flow",
+      "recovered": true,
+      "candidate_index": 0,
+      "artifact_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "artifact_text_field": "cycle_b_artifacts[].transcript_excerpt",
+      "artifact_text_sha256_utf8": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "artifact_text_character_count": 11996,
+      "quote": "a ran a command she saw our request here's our run command and then here's the output so this scratch Pad is fully updatable right so if I just come in here and I take a couple of these IDs and I create something new update user block and I'm going to have another block here create user\n\n**[00:09:17]** block and then we'll have a delete user block okay in the create user block I'm going to say this Alex viewer Mary editor and then Steve admin and then for the delete user block all I'm going to do here is give a list of a couple of these IDs right so paste a couple of these user IDs in so that's great we now have this you know updated active memory okay our personal a assistant Ada can see this entire\n\n**[00:09:48]** scratch Pad she can work with everything here she can also see all of her commands here right so we have a couple key commands here you know list users create user delete user let's go ahead give a reference to this blog I hope you can see where this is going I'm going to give her a reference to this block and then I just want her to execute and do all the work that we would normally do much faster and all we're doing is kind of thinking at a high level we're updating our active memory our scratch pad and then letting our always on personal AI assistant do the work for us so I'll kick her off right here Ada go\n\n**[00:10:19]** ahead and look at the update user block and run the respective create user and delete user commands command executed Dan let me know what's next okay so check this out so this is really cool right she created the command she you know created this giant execution statement and we got a couple of outputs here our created commands and then we also have our delete commands that failed so something went wrong here\n\n**[00:10:49]** and I think it's because let me look at exactly how this delete user Works user ID might just be a single ID so yeah that looks right so what I'm going to do is I'm just going to ask a to to correct this for us right so I'll say a rerun the delete commands but only use the actual um user ID so not the user undor prefix just use the numbers for the\n\n**[00:11:24]** deletion command executed successfully Dan let me know what's next",
+      "character_span": [
+        1704,
+        3925
+      ],
+      "span_validation": true
+    },
+    {
+      "dimension_index": 5,
+      "required_dimension": "continuity survives fresh assistant executions",
+      "recovered": true,
+      "candidate_index": 0,
+      "artifact_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "artifact_text_field": "cycle_b_artifacts[].transcript_excerpt",
+      "artifact_text_sha256_utf8": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "artifact_text_character_count": 11996,
+      "quote": "if we also open up our adaa script you can see exactly how this is getting kicked off we're running UV python main typer assistant with the awaken command and we're passing in a couple variables the path to our typer file the path to our scratch pad and our execution mode okay so if we look at the variables to this we're effectively taking these variables loading them and then inside of our\n\n**[00:18:38]** prompt replacing them right so here's our type of commands here's our context files here's our scratch Pad super important",
+      "character_span": [
+        11057,
+        11589
+      ],
+      "span_validation": true
+    },
+    {
+      "dimension_index": 6,
+      "required_dimension": "the mechanism improves correction and multi-step engineering without reconstructing context",
+      "recovered": true,
+      "candidate_index": 0,
+      "artifact_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "artifact_text_field": "cycle_b_artifacts[].transcript_excerpt",
+      "artifact_text_sha256_utf8": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "artifact_text_character_count": 11996,
+      "quote": "we ran that command she generated all of the output for us part of the command worked part of it didn't and then we you know asked her again to correct it to make some modifications to it",
+      "character_span": [
+        6388,
+        6575
+      ],
+      "span_validation": true
+    }
+  ],
+  "url_validation": {
+    "packet_artifact_urls": [
+      "https://www.youtube.com/watch?v=090oR--s__8",
+      "https://www.youtube.com/watch?v=4SnvMieJiuw",
+      "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+    ],
+    "worker_evidence_urls": [
+      "https://www.youtube.com/watch?v=090oR--s__8",
+      "https://www.youtube.com/watch?v=4SnvMieJiuw",
+      "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+    ],
+    "required_lineage_urls": [
+      "https://www.youtube.com/watch?v=090oR--s__8",
+      "https://www.youtube.com/watch?v=4SnvMieJiuw",
+      "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+    ],
+    "all_worker_evidence_urls_present_in_packet": true,
+    "all_required_lineage_urls_present_in_packet": true
+  },
+  "lineage_validation": {
+    "edges": [
+      {
+        "from_url": "https://www.youtube.com/watch?v=090oR--s__8",
+        "to_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+        "relationship": "continuation",
+        "from_present_in_packet": true,
+        "to_present_in_packet": true,
+        "from_cycle": "cycle_a",
+        "to_cycle": "cycle_b",
+        "passes": true
+      },
+      {
+        "from_url": "https://www.youtube.com/watch?v=4SnvMieJiuw",
+        "to_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+        "relationship": "continuation",
+        "from_present_in_packet": true,
+        "to_present_in_packet": true,
+        "from_cycle": "cycle_a",
+        "to_cycle": "cycle_b",
+        "passes": true
+      }
+    ],
+    "at_least_one_cycle_a_to_cycle_b_edge_passes": true
+  }
+}

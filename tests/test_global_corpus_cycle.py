@@ -173,6 +173,8 @@ class ManifestEnumerationEntrypointTests(unittest.TestCase):
         self.assertIn("agentic-engineering", summary["domains_planned"])
         self.assertIn("training", summary["domains_planned"])
         self.assertEqual(summary["failures"], [])
+        self.assertEqual(summary["self_expansion"]["status"], "disabled")
+        self.assertFalse(summary["self_expansion"]["enabled"])
         budget = json.loads(self.budget.read_text(encoding="utf-8"))
         request = next(iter(budget["reservations"].values()))["request"]
         pointers = [item["candidate"]["evidence_pointer"] for item in request["tasks"]]

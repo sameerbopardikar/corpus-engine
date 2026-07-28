@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-07-28T00:18:00Z",
+  "target_label": "adaptive indirect-injection robustness evaluation",
+  "forbidden_seed_terms": [
+    "agentdojo",
+    "prompt injection",
+    "untrusted data",
+    "adaptive attack"
+  ],
+  "required_mechanisms": [
+    "untrusted",
+    "attacks",
+    "defenses",
+    "tasks"
+  ],
+  "expected_source_path": [
+    "broad scholarly safety discovery",
+    "broad GitHub agent-security benchmark discovery",
+    "ethz-spylab/agentdojo promotion",
+    "repository inspection",
+    "authors, paper, results, and benchmark mechanism"
+  ],
+  "acceptance_note": "Exact target-label guessing is optional. A grounded mechanism statement must identify evaluation of tool-using agents on useful tasks under untrusted data, with both attacks and defenses represented."
+}

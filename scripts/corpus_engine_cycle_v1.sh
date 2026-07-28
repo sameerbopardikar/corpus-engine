@@ -20,30 +20,62 @@ CORPORA_ROOT="${CORPUS_CORPORA_ROOT:-/root/corpora}"
 # per-domain isolated roots under $CORPORA_ROOT. Set CORPUS_ACQUISITION_EXECUTE=0
 # for a safe planning-only dry run that touches no corpus bytes.
 EXECUTE="${CORPUS_ACQUISITION_EXECUTE:-1}"
+LEGACY_SHIMS="${CORPUS_LEGACY_SHIMS:-1}"
+SELF_EXPANSION_PROOF_CONFIG="${CORPUS_SELF_EXPANSION_PROOF_CONFIG:-}"
+SELF_EXPANSION_PROOF_ROOT="${CORPUS_SELF_EXPANSION_PROOF_ROOT:-}"
+SELF_EXPANSION_CONFIG="${CORPUS_SELF_EXPANSION_CONFIG:-}"
+# Test-only deterministic clock used by isolated integration fixtures.
+SELF_EXPANSION_TEST_NOW="${CORPUS_SELF_EXPANSION_TEST_NOW:-}"
 GLOBAL_RESULT="$(mktemp)"
 trap 'rm -f "$GLOBAL_RESULT"' EXIT
+
+if [[ -n "$SELF_EXPANSION_PROOF_CONFIG" || -n "$SELF_EXPANSION_PROOF_ROOT" ]]; then
+  if [[ -z "$SELF_EXPANSION_PROOF_CONFIG" || -z "$SELF_EXPANSION_PROOF_ROOT" ]]; then
+    echo "CORPUS_SELF_EXPANSION_PROOF_CONFIG and CORPUS_SELF_EXPANSION_PROOF_ROOT must be set together" >&2
+    exit 2
+  fi
+fi
 
 # One global, manifest-driven cycle across all enabled domains. In execute mode
 # it discovers, resolves rights fail-closed, and admits budget-selected rights-
 # clear evidence per domain; in dry-run mode it only plans.
 CYCLE_ARGS=(--config-dir "$CONFIG_DIR" --budget-path "$BUDGET_PATH")
+if [[ -n "$SELF_EXPANSION_CONFIG" ]]; then
+  CYCLE_ARGS+=(--self-expansion-config "$SELF_EXPANSION_CONFIG")
+fi
+if [[ -n "$SELF_EXPANSION_TEST_NOW" ]]; then
+  CYCLE_ARGS+=(--self-expansion-now "$SELF_EXPANSION_TEST_NOW")
+fi
 if [[ "$EXECUTE" != "0" ]]; then
   CYCLE_ARGS+=(--execute --corpora-root "$CORPORA_ROOT")
 fi
 python3 "$REPO_ROOT/scripts/corpus_global_cycle.py" "${CYCLE_ARGS[@]}" > "$GLOBAL_RESULT"
 cat "$GLOBAL_RESULT"
 
+# Optional acceptance-proof lane. It is disabled unless both paths are supplied,
+# writes only beneath the caller-selected marked proof root, and does not widen
+# the production acquisition or promotion policy. Running it through this exact
+# wrapper proves the timer-owned entrypoint can execute the persisted two-cycle
+# path without introducing another scheduler.
+if [[ -n "$SELF_EXPANSION_PROOF_CONFIG" ]]; then
+  python3 "$REPO_ROOT/scripts/corpus_self_expansion_proof.py" \
+    --config "$SELF_EXPANSION_PROOF_CONFIG" \
+    --run-root "$SELF_EXPANSION_PROOF_ROOT"
+fi
+
 # Optional compatibility shim: preserve the proven Agentic Engineering intake +
 # shadow replay when (and only when) their deployed binaries are present. This
 # keeps existing deployments working without making the scheduler Agentic-only.
-if command -v corpus-intake >/dev/null 2>&1 \
+if [[ "$LEGACY_SHIMS" != "0" ]] \
+   && command -v corpus-intake >/dev/null 2>&1 \
    && [[ -d /root/corpora/agentic-engineering ]]; then
   CORPUS_INTAKE_ROOT="${AGENTIC_CORPUS_INTAKE_ROOT:-/var/lib/agentic-corpus-intake}" \
     corpus-intake process --all \
       --corpus-root /root/corpora/agentic-engineering || true
 fi
 
-if command -v agentic-engineering-shadow >/dev/null 2>&1 \
+if [[ "$LEGACY_SHIMS" != "0" ]] \
+   && command -v agentic-engineering-shadow >/dev/null 2>&1 \
    && [[ -f /root/.hermes/.env ]]; then
   set -a; source /root/.hermes/.env; set +a
   export GBRAIN_DISABLE_DIRECT_POOL=1

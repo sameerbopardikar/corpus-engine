@@ -1,0 +1,64 @@
+{
+  "artifact_count": 3,
+  "artifacts": [
+    {
+      "byte_length": 8656,
+      "declared_source_sha256": "b0c4934375a7251cc8172f4f824571891aeab52e17cf4284dfaf012be643a742",
+      "packet_path": "cycle_a_artifacts[0]",
+      "sha256": "b498de3a75ebe8ee13c7c54b7cb665692c1b2baf1c859cce057d8346ea95dce8",
+      "text_field": "transcript_excerpt",
+      "url": "https://www.youtube.com/watch?v=090oR--s__8"
+    },
+    {
+      "byte_length": 2838,
+      "declared_source_sha256": "ce57ce0abb3237f6e4d46fd7a627bd9e273c32d5f73531b11eaa3bbe4a99b92d",
+      "packet_path": "cycle_a_artifacts[1]",
+      "sha256": "2bcb28bfaf354c40a1fee4ab16f999f6989c1cf2e99a8b3e0d38f070c223b0a4",
+      "text_field": "transcript_excerpt",
+      "url": "https://www.youtube.com/watch?v=4SnvMieJiuw"
+    },
+    {
+      "byte_length": 11996,
+      "declared_source_sha256": "49eea8246bda46f5c9320612ff030269f1955c4e82245e002cde1370124461ee",
+      "packet_path": "cycle_b_artifacts[0]",
+      "sha256": "50307c04dcf2056053834fb48569acf8bc025a60f44dc10e178ac9a26f6e85c5",
+      "text_field": "transcript_excerpt",
+      "url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+    }
+  ],
+  "leakage_absent": false,
+  "leakage_findings": [
+    {
+      "locations": [
+        "cycle_a_artifacts[0]",
+        "cycle_a_artifacts[1]",
+        "cycle_b_artifacts[0]"
+      ],
+      "term": "active memory"
+    },
+    {
+      "locations": [
+        "cycle_b_artifacts[0]"
+      ],
+      "term": "scratchpad"
+    }
+  ],
+  "leaked_terms": [
+    "active memory",
+    "scratchpad"
+  ],
+  "packet_byte_length": 25334,
+  "packet_label": "scratchpad-holdout",
+  "packet_sha256": "5de04d4083ead54b96198e89ad5506ad8b954749977ee8ea8b3e6425165611e5",
+  "scanned_terms": [
+    "Scratch-pad active memory pattern",
+    "active memory",
+    "externalized active memory",
+    "file-backed working memory",
+    "scratch-pad active memory",
+    "scratchpad",
+    "shared scratchpad state"
+  ],
+  "schema_version": 1,
+  "worker_visible_sha256": "5de04d4083ead54b96198e89ad5506ad8b954749977ee8ea8b3e6425165611e5"
+}

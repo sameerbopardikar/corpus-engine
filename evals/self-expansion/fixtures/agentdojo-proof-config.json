@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "domain": "agentic-engineering",
+  "evaluated_at": "2026-07-28T00:25:00Z",
+  "seed_packet": {
+    "registry": [
+      "official agent framework repositories",
+      "official tool-use documentation",
+      "practitioner engineering channels"
+    ],
+    "ontology": [
+      "agent lifecycle",
+      "tool use",
+      "reliability",
+      "verification",
+      "safety control security",
+      "evaluation observability"
+    ],
+    "queries": [
+      "agent security benchmark",
+      "LLM agent reliability evaluation"
+    ]
+  },
+  "hidden_evaluator": {
+    "target_label": "adaptive indirect-injection robustness evaluation",
+    "forbidden_seed_terms": [
+      "agentdojo",
+      "prompt injection",
+      "untrusted data",
+      "adaptive attack"
+    ],
+    "required_mechanisms": [
+      "untrusted",
+      "attacks",
+      "defenses",
+      "tasks"
+    ]
+  },
+  "cycle_a": {
+    "relationships": [
+      {
+        "domain": "agentic-engineering",
+        "source_family": "paper",
+        "relationship_type": "linked_primary_source",
+        "entity_type": "repository",
+        "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+        "title": "ethz-spylab/agentdojo",
+        "discovered_from_url": "https://arxiv.org/abs/2406.13352",
+        "evidence_pointer": "https://arxiv.org/abs/2406.13352",
+        "evidence_lane": "security-evaluation",
+        "topics": [
+          "safety-control-security",
+          "evaluation-observability",
+          "agent-reliability"
+        ],
+        "observed_at": "2024-11-24T22:04:23Z"
+      },
+      {
+        "domain": "agentic-engineering",
+        "source_family": "github-search",
+        "relationship_type": "related_project",
+        "entity_type": "repository",
+        "canonical_url": "https://github.com/ethz-spylab/agentdojo",
+        "title": "ethz-spylab/agentdojo",
+        "discovered_from_url": "https://api.github.com/search/repositories?q=agent%20security%20benchmark",
+        "evidence_pointer": "https://api.github.com/search/repositories?q=agent%20security%20benchmark",
+        "evidence_lane": "security-evaluation",
+        "topics": [
+          "safety-control-security",
+          "evaluation-observability",
+          "agent-reliability"
+        ],
+        "observed_at": "2026-07-27T23:00:00Z"
+      }
+    ]
+  },
+  "cycle_b": {
+    "batches": [
+      {
+        "watch_source_url": "https://github.com/ethz-spylab/agentdojo",
+        "artifact_url": "https://github.com/ethz-spylab/agentdojo",
+        "relationships": [
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "authored",
+            "entity_type": "creator",
+            "canonical_url": "https://edoardo.science",
+            "title": "Edoardo Debenedetti",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "authored",
+            "entity_type": "creator",
+            "canonical_url": "https://zj-jayzhang.github.io",
+            "title": "Jie Zhang",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "authored",
+            "entity_type": "creator",
+            "canonical_url": "https://www.sri.inf.ethz.ch/people/mislav",
+            "title": "Mislav Balunović",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "authored",
+            "entity_type": "creator",
+            "canonical_url": "https://www.sri.inf.ethz.ch/people/luca",
+            "title": "Luca Beurer-Kellner",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "authored",
+            "entity_type": "creator",
+            "canonical_url": "https://marcfischer.at",
+            "title": "Marc Fischer",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "authored",
+            "entity_type": "creator",
+            "canonical_url": "https://floriantramer.com",
+            "title": "Florian Tramèr",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "cited",
+            "entity_type": "paper",
+            "canonical_url": "https://arxiv.org/abs/2406.13352",
+            "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          },
+          {
+            "domain": "agentic-engineering",
+            "source_family": "github",
+            "relationship_type": "linked_primary_source",
+            "entity_type": "document",
+            "canonical_url": "https://agentdojo.spylab.ai/results/",
+            "title": "AgentDojo Results",
+            "discovered_from_url": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_pointer": "https://github.com/ethz-spylab/agentdojo",
+            "evidence_lane": "security-evaluation",
+            "topics": [
+              "safety-control-security",
+              "evaluation-observability",
+              "agent-reliability"
+            ],
+            "observed_at": "2026-07-17T08:36:00Z"
+          }
+        ]
+      }
+    ]
+  },
+  "worker_output": {
+    "concept_candidates": [
+      {
+        "statement": "AgentDojo exposes a configurable benchmark runner that composes a selected task suite and user tasks with a specified LLM, defense, and attack—such as a tool-filter defense against a tool-knowledge attack—and can scale the same configuration across all suites and tasks, with outputs inspectable through a dedicated results page and benchmark registry.",
+        "evidence_pointers": [
+          "https://github.com/ethz-spylab/agentdojo"
+        ]
+      }
+    ]
+  }
+}

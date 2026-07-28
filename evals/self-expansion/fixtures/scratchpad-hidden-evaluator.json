@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-07-28T00:30:00Z",
+  "target_label": "Scratch-pad active memory pattern",
+  "accepted_close_labels": [
+    "externalized active memory",
+    "file-backed working memory",
+    "shared scratchpad state"
+  ],
+  "forbidden_seed_terms": [
+    "scratch-pad active memory",
+    "scratchpad",
+    "active memory",
+    "file-backed working memory"
+  ],
+  "required_mechanism_dimensions": [
+    "mutable working-state artifact outside chat history",
+    "reuse across multiple commands or model calls",
+    "explicit prompt-time loading",
+    "human and agent writes",
+    "structured intent-command-output-correction flow",
+    "continuity across fresh executions"
+  ],
+  "required_lineage_urls": [
+    "https://www.youtube.com/watch?v=090oR--s__8",
+    "https://www.youtube.com/watch?v=4SnvMieJiuw",
+    "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+  ],
+  "acceptance_rule": "Pass when one concept candidate recovers at least four of six mechanism dimensions and project_lineage connects Cycle A to the non-identical Cycle B implementation. Exact target-label guessing is optional."
+}
