@@ -17,7 +17,7 @@ from typing import Any
 from corpus_candidate_policy import evaluate_candidates
 from corpus_discovery import DiscoveryEngine
 from corpus_entity_identity import canonical_entity_identity
-from corpus_source_graph import ingest_relationships, relationship_to_observation
+from corpus_source_graph import ingest_relationships
 from corpus_watch_inspection import (
     project_preserved_source_artifact,
     run_watch_inspection,
@@ -238,6 +238,15 @@ def _run_domain(
         admitted_produced.append(relationship)
         by_identity.setdefault(identity, relationship)
     produced = admitted_produced
+    for relationship in produced:
+        result = ingest_relationships(
+            [relationship],
+            graph_path=paths["graph"],
+            discovery_ledger_path=paths["ledger"],
+            max_items=config["max_relationships_per_artifact"],
+        )
+        appended += result["relationships_appended"]
+
     rights_engine = DiscoveryEngine(paths["ledger"])
     for index, assertion in enumerate(rights_assertions):
         try:
@@ -248,29 +257,27 @@ def _run_domain(
             if rights not in _BODY_RIGHTS:
                 raise SelfExpansionCycleError("rights assertion is not body-authorized")
             relationship = by_identity.get(identity)
-            if relationship is None:
-                # Replay may assert an already durable candidate, but never a new,
-                # unrelated URL.  It must already exist with the same explicit rights.
-                existing = next(
-                    (item for item in rights_engine.candidates.values()
-                     if canonical_entity_identity(item.canonical_url) == identity),
-                    None,
-                )
-                if existing is None or existing.rights_state != rights:
-                    raise SelfExpansionCycleError("rights assertion does not bind a produced candidate")
-            else:
-                rights_engine.observe(relationship_to_observation(relationship), rights_state=rights)
+            existing = next(
+                (item for item in rights_engine.candidates.values()
+                 if canonical_entity_identity(item.canonical_url) == identity),
+                None,
+            )
+            if existing is None:
+                raise SelfExpansionCycleError("rights assertion does not bind a durable candidate")
+            if relationship is None and existing.rights_state != rights:
+                # A config replay may restate already-durable rights, but it may
+                # not upgrade an unrelated candidate without a source artifact
+                # produced and grounded in this cycle.
+                raise SelfExpansionCycleError("rights assertion does not bind a produced candidate")
+            rights_engine.assert_rights(
+                existing.candidate_id,
+                rights,
+                asserted_by="self-expansion-config",
+                basis="explicit-body-authorization",
+                asserted_at=_iso(now),
+            )
         except Exception as exc:
             failures.append({"stage": f"rights_assertion[{index}]", "error": f"{type(exc).__name__}: {exc}"})
-
-    for relationship in produced:
-        result = ingest_relationships(
-            [relationship],
-            graph_path=paths["graph"],
-            discovery_ledger_path=paths["ledger"],
-            max_items=config["max_relationships_per_artifact"],
-        )
-        appended += result["relationships_appended"]
 
     candidate_count = _candidate_guard(paths["ledger"], config["max_candidates_per_cycle"])
     policy = None

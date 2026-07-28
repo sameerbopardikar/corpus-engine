@@ -32,6 +32,15 @@ class WrapperExecuteModeTests(unittest.TestCase):
 
     def _run(self, execute_env=None, *, extra_env=None):
         env = dict(os.environ)
+        for name in (
+            "CORPUS_ACQUISITION_EXECUTE",
+            "CORPUS_LEGACY_SHIMS",
+            "CORPUS_SELF_EXPANSION_CONFIG",
+            "CORPUS_SELF_EXPANSION_TEST_NOW",
+            "CORPUS_SELF_EXPANSION_PROOF_CONFIG",
+            "CORPUS_SELF_EXPANSION_PROOF_ROOT",
+        ):
+            env.pop(name, None)
         env["PATH"] = f"{self.bindir}:{env['PATH']}"
         env["CORPUS_CONFIG_DIR"] = str(ROOT / "config" / "domains")
         env["CORPUS_BUDGET_PATH"] = str(self.tmp / "budget.json")
@@ -94,6 +103,15 @@ class WrapperExecuteModeTests(unittest.TestCase):
 
     def test_self_expansion_wrapper_configuration_is_all_or_nothing(self):
         env = dict(os.environ)
+        for name in (
+            "CORPUS_ACQUISITION_EXECUTE",
+            "CORPUS_LEGACY_SHIMS",
+            "CORPUS_SELF_EXPANSION_CONFIG",
+            "CORPUS_SELF_EXPANSION_TEST_NOW",
+            "CORPUS_SELF_EXPANSION_PROOF_CONFIG",
+            "CORPUS_SELF_EXPANSION_PROOF_ROOT",
+        ):
+            env.pop(name, None)
         env["PATH"] = f"{self.bindir}:{env['PATH']}"
         env["CORPUS_CONFIG_DIR"] = str(ROOT / "config" / "domains")
         env["CORPUS_BUDGET_PATH"] = str(self.tmp / "budget.json")

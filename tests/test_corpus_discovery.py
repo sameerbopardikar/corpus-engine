@@ -154,6 +154,48 @@ class CandidateReplayTests(DiscoveryEngineTestCase):
         )
         self.assertEqual(replayed.candidates[obs.candidate_key].status, "probationary")
 
+    def test_explicit_rights_assertion_is_auditable_idempotent_and_replayable(self):
+        engine = self.engine()
+        obs = make_observation()
+        engine.observe(obs, rights_state="rights_unclear")
+        asserted = engine.assert_rights(
+            obs.candidate_key,
+            "private_authorized",
+            asserted_by="test-owner-policy",
+            basis="explicit-test-authorization",
+            asserted_at="2026-07-16T12:30:00Z",
+        )
+        self.assertEqual(asserted.rights_state, "private_authorized")
+        events_after_assertion = len(engine.ledger.read_events())
+        replay = engine.assert_rights(
+            obs.candidate_key,
+            "private_authorized",
+            asserted_by="test-owner-policy",
+            basis="explicit-test-authorization",
+            asserted_at="2026-07-16T12:30:00Z",
+        )
+        self.assertEqual(replay.to_dict(), asserted.to_dict())
+        self.assertEqual(len(engine.ledger.read_events()), events_after_assertion)
+        event = engine.ledger.read_events()[-1]
+        self.assertEqual(event["event_type"], "candidate_rights_asserted")
+        self.assertEqual(event["payload"]["prior_rights_state"], "rights_unclear")
+        self.assertEqual(event["payload"]["rights_state"], "private_authorized")
+        self.assertEqual(
+            self.engine().candidates[obs.candidate_key].rights_state,
+            "private_authorized",
+        )
+
+    def test_observation_still_cannot_silently_change_rights(self):
+        engine = self.engine()
+        obs = make_observation()
+        engine.observe(obs, rights_state="rights_unclear")
+        independent = make_observation(
+            discovery_source="x_discovery:mention",
+            evidence_pointer="https://x.com/status/999",
+        )
+        with self.assertRaisesRegex(ValueError, "silently change"):
+            engine.observe(independent, rights_state="private_authorized")
+
     def test_candidate_key_stability_across_engine_instances(self):
         engine = self.engine()
         obs = make_observation()
