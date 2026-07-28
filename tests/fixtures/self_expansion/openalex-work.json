@@ -1,0 +1,9 @@
+{
+  "id": "https://openalex.org/W1234567890",
+  "title": "Reliable Recovery for Tool-Using Agents",
+  "authorships": [
+    {"author": {"id": "https://openalex.org/A111", "display_name": "A. Researcher"}},
+    {"author": {"id": "https://openalex.org/A222", "display_name": "B. Engineer"}}
+  ],
+  "referenced_works": ["https://openalex.org/W777", "https://openalex.org/W888"]
+}

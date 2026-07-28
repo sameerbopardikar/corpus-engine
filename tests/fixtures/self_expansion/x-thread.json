@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "signals": [
+    {
+      "author": "@novel_builder",
+      "published_at": "2026-07-20T12:00:00Z",
+      "url": "https://x.com/novel_builder/status/100",
+      "text": "The implementation notes and code are linked.",
+      "thread_id": "100",
+      "linked_primary_sources": ["https://github.com/example/novel-runtime"]
+    }
+  ]
+}
