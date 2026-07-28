@@ -1,11 +1,11 @@
 {
-  "code_commit_at_run": "ae31186572d916721b16182414fbf8a12aaf9b5e",
+  "code_commit_at_run": "775262c78682154d3f37b1eb3ee7f14c660a8779",
   "global_cycle_status": "planned",
   "legacy_shims_disabled": true,
   "mode": "isolated-dry-global-cycle-plus-opt-in-self-expansion-proof",
   "production_cron_modified": false,
-  "proof_receipt_bytes": 11013,
-  "proof_receipt_sha256": "082e6a10beb75bc31c792c992865b3c335e7be17dd078232614779231a26e457",
+  "proof_receipt_bytes": 11029,
+  "proof_receipt_sha256": "de0790999d7fb5b53f3e8ebaef7152464f8eb9322247f71feaa5998a834af6bc",
   "schema_version": 2,
   "self_expansion_gates": {
     "candidate_promotion": true,
