@@ -60,7 +60,7 @@ hardened harness refuses it by design.
 - Used: 3 / 5
 - Remaining: 2
 - Baseline unit tests: 612 passed
-- Current closure suite: 733 passed
+- Current closure suite: 734 passed
 - Run 2: historical unknown-concept failure; its old leakage pass was invalidated
 - Run 3: higher-order target leakage scan passed; blinded worker recovered all six
   dimensions; independent exact-byte grounding and lineage evaluation passed

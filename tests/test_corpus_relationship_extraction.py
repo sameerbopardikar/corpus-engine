@@ -26,8 +26,8 @@ from corpus_source_graph import ingest_relationships
 
 YOUTUBE_URL = "https://www.youtube.com/watch?v=episode100"
 PODCAST_URL = "https://example.com/podcast/episode-12"
-MAYA_QUOTE = "Today I am joined by Maya Chen, who built the recovery controller used by her team."
-RAVI_QUOTE = "Our guest Ravi Shah maintains the replay debugger."
+MAYA_QUOTE = "Today I am joined by Maya Chen (https://example.org/people/maya-chen), who built the recovery controller used by her team."
+RAVI_QUOTE = "Our guest Ravi Shah (https://example.org/people/ravi-shah) maintains the replay debugger."
 
 
 def digest(text: str) -> str:
@@ -160,6 +160,22 @@ class CrossFamilyRelationshipExtractionTests(unittest.TestCase):
                 url=YOUTUBE_URL,
                 claims=[maya_claim(text, title="Somebody Else Entirely")],
             )
+
+    def test_semantic_name_without_canonical_locator_fails_closed(self):
+        quote = "Today I am joined by Maya Chen, who built the recovery controller."
+        text = f"Intro. {quote} End."
+        claim = {
+            "relationship_type": "guest_of",
+            "entity_type": "creator",
+            "canonical_url": "https://example.org/people/maya-chen",
+            "title": "Maya Chen",
+            "entity_mention": "Maya Chen",
+            "relation_mention": "joined by",
+            "evidence_quote": quote,
+            "evidence_span": span_of(text, quote),
+        }
+        with self.assertRaisesRegex(RelationshipExtractionError, "canonical target"):
+            self.semantic(text=text, url=YOUTUBE_URL, claims=[claim])
 
     def test_canonical_target_must_match_locator_named_in_the_span(self):
         quote = (

@@ -12,7 +12,7 @@ import hashlib
 import re
 from html.parser import HTMLParser
 from typing import Any, Iterable
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 from corpus_entity_identity import EntityIdentityError, canonical_entity_identity
 from corpus_source_graph import (
@@ -112,14 +112,15 @@ _URL_IN_TEXT = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
 
 
 def _span_binds_canonical_target(quote: str, canonical_url: str, entity_mention: str) -> bool:
-    """Require the span to identify the same entity as the claimed locator.
+    """Require an exact canonical locator inside the validated span.
 
-    When a span contains locators, at least one must canonicalize to the claimed
-    target. A different URL plus a caller-controlled matching title must never
-    authorize target substitution. For natural-language spans without a URL,
-    the terminal locator slug must exactly name the normalized entity mention;
-    structured adapters remain the preferred route for looser entity resolution.
+    Natural-language names do not prove which external entity page a caller
+    selected; two hosts can publish the same slug or display name. Semantic
+    claims therefore require one URL in the preserved quote to canonicalize to
+    the claimed target. Structured adapters may resolve names from authoritative
+    source metadata separately.
     """
+    del entity_mention
     try:
         target = canonical_entity_identity(canonical_url)
     except EntityIdentityError as exc:
@@ -131,13 +132,7 @@ def _span_binds_canonical_target(quote: str, canonical_url: str, entity_mention:
             locators.append(canonical_entity_identity(candidate))
         except EntityIdentityError:
             continue
-    if locators:
-        return target in locators
-    path_parts = [part for part in urlsplit(target).path.split("/") if part]
-    if not path_parts:
-        return False
-    slug = unquote(path_parts[-1]).replace("-", " ").replace("_", " ")
-    return _normalize_mention(slug) == _normalize_mention(entity_mention)
+    return target in locators
 
 
 def _validated_span(value: Any, artifact_text: str, quote: str) -> tuple[int, int]:
