@@ -3,12 +3,13 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-import stat
-import tempfile
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlsplit
+
+from corpus_file_authority import PathAuthorityError, bind_parent, open_regular_at
 
 
 SCHEMA_VERSION = 1
@@ -95,37 +96,15 @@ def _normalize_signal(value: Any) -> dict[str, Any]:
     }
 
 
-def _open_regular_nofollow(path: Path, flags: int, *, label: str) -> int:
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if not nofollow:
-        raise XSignalContractError("no-follow file opens are unavailable")
+def _read_existing_at(parent_fd: int, leaf: str) -> dict[str, Any] | None:
     try:
-        descriptor = os.open(
-            path,
-            flags
-            | nofollow
-            | getattr(os, "O_NONBLOCK", 0)
-            | getattr(os, "O_CLOEXEC", 0),
-            0o600,
-        )
-    except FileNotFoundError:
-        raise
-    except OSError as exc:
-        raise XSignalContractError(f"{label} must be a regular non-symlink file") from exc
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise XSignalContractError(f"{label} must be a regular non-symlink file")
-    except BaseException:
-        os.close(descriptor)
-        raise
-    return descriptor
-
-
-def _read_existing(path: Path) -> dict[str, Any] | None:
-    try:
-        descriptor = _open_regular_nofollow(path, os.O_RDONLY, label="X projection")
+        descriptor = open_regular_at(parent_fd, leaf, os.O_RDONLY)
     except FileNotFoundError:
         return None
+    except PathAuthorityError as exc:
+        raise XSignalContractError(
+            "X projection must be a regular non-symlink file"
+        ) from exc
     try:
         with os.fdopen(descriptor, "r", encoding="utf-8") as projection_file:
             encoded = projection_file.read()
@@ -176,25 +155,29 @@ def _project(signals_by_url: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _atomic_write(path: Path, encoded: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+def _atomic_write_at(parent_fd: int, leaf: str, encoded: bytes) -> None:
+    temporary = f".{leaf}.{os.getpid()}.{secrets.token_hex(8)}"
     try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "wb") as handle:
+        descriptor = open_regular_at(
+            parent_fd,
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        )
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        os.chmod(path, 0o600)
-        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        os.rename(
+            temporary,
+            leaf,
+            src_dir_fd=parent_fd,
+            dst_dir_fd=parent_fd,
+        )
+        os.fsync(parent_fd)
     finally:
         try:
-            os.unlink(temporary)
+            os.unlink(temporary, dir_fd=parent_fd)
         except FileNotFoundError:
             pass
 
@@ -246,41 +229,50 @@ def ingest_x_signals(
             raise XSignalContractError("current X batch exceeds the 1000-relationship graph bound")
 
     output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = output_path.with_suffix(output_path.suffix + ".lock")
-    lock_fd = _open_regular_nofollow(
-        lock_path, os.O_RDWR | os.O_CREAT, label="X projection lock"
-    )
-    os.fchmod(lock_fd, 0o600)
-    with os.fdopen(lock_fd, "r+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        existing = _read_existing(output_path)
-        by_url: dict[str, dict[str, Any]] = {}
-        if existing is not None:
-            for signal in existing["signals"]:
-                if not isinstance(signal, dict) or not isinstance(signal.get("url"), str):
-                    raise XSignalContractError("invalid signal in existing X projection")
+    try:
+        parent_binding = bind_parent(output_path, create=True)
+        parent_fd, leaf = parent_binding.__enter__()
+    except (FileNotFoundError, PathAuthorityError) as exc:
+        raise XSignalContractError("X projection parent authority is unavailable") from exc
+    try:
+        try:
+            lock_fd = open_regular_at(parent_fd, leaf + ".lock", os.O_RDWR | os.O_CREAT)
+        except PathAuthorityError as exc:
+            raise XSignalContractError(
+                "X projection lock must be a regular non-symlink file"
+            ) from exc
+        os.fchmod(lock_fd, 0o600)
+        with os.fdopen(lock_fd, "r+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            existing = _read_existing_at(parent_fd, leaf)
+            by_url: dict[str, dict[str, Any]] = {}
+            if existing is not None:
+                for signal in existing["signals"]:
+                    if not isinstance(signal, dict) or not isinstance(signal.get("url"), str):
+                        raise XSignalContractError("invalid signal in existing X projection")
+                    by_url[signal["url"]] = signal
+
+            for signal in normalized:
+                prior = by_url.get(signal["url"])
+                if prior is not None and prior != signal:
+                    raise XSignalContractError(f"conflicting duplicate URL: {signal['url']}")
                 by_url[signal["url"]] = signal
 
-        for signal in normalized:
-            prior = by_url.get(signal["url"])
-            if prior is not None and prior != signal:
-                raise XSignalContractError(f"conflicting duplicate URL: {signal['url']}")
-            by_url[signal["url"]] = signal
+            projection = _project(by_url)
+            encoded = (json.dumps(projection, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+            if graph_relationships is not None:
+                from corpus_source_graph import ingest_relationships
 
-        projection = _project(by_url)
-        encoded = (json.dumps(projection, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
-        if graph_relationships is not None:
-            from corpus_source_graph import ingest_relationships
-
-            assert source_graph_path is not None
-            assert discovery_ledger_path is not None
-            ingest_relationships(
-                graph_relationships,
-                graph_path=Path(source_graph_path),
-                discovery_ledger_path=Path(discovery_ledger_path),
-                max_items=1000,
-            )
-        if existing != projection:
-            _atomic_write(output_path, encoded)
-        return projection
+                assert source_graph_path is not None
+                assert discovery_ledger_path is not None
+                ingest_relationships(
+                    graph_relationships,
+                    graph_path=Path(source_graph_path),
+                    discovery_ledger_path=Path(discovery_ledger_path),
+                    max_items=1000,
+                )
+            if existing != projection:
+                _atomic_write_at(parent_fd, leaf, encoded)
+            return projection
+    finally:
+        parent_binding.__exit__(None, None, None)

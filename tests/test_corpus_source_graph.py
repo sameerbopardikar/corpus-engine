@@ -128,6 +128,22 @@ class SourceGraphExpansionTests(unittest.TestCase):
                 if lock_path.exists():
                     lock_path.unlink()
 
+    def test_symlinked_parent_component_cannot_redirect_graph_state(self):
+        trusted = self.root / "trusted"
+        outside = self.root / "outside"
+        trusted.mkdir()
+        outside.mkdir()
+        (trusted / "link").symlink_to(outside, target_is_directory=True)
+        redirected_graph = trusted / "link" / "source-graph.jsonl"
+        with self.assertRaisesRegex(SourceGraphContractError, "parent authority"):
+            ingest_relationships(
+                [self.relation()],
+                graph_path=redirected_graph,
+                discovery_ledger_path=self.discovery,
+            )
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse(self.discovery.exists())
+
     def test_unseen_entities_from_multiple_source_families_enter_one_candidate_graph(self):
         relationships = [
             self.relation(),

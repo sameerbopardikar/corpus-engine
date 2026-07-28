@@ -15,7 +15,6 @@ import hashlib
 import json
 import os
 import re
-import stat
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +23,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from corpus_discovery import DiscoveryEngine
 from corpus_engine_models import CandidateObservation, ENTITY_TYPES
+from corpus_file_authority import PathAuthorityError, bind_parent, open_regular_at
 from corpus_entity_identity import EntityIdentityError, canonical_entity_identity
 
 SCHEMA_VERSION = 1
@@ -187,37 +187,15 @@ class SourceRelationship:
         return {"schema_version": SCHEMA_VERSION, "relation_id": self.relation_id, **value}
 
 
-def _open_regular_nofollow(path: Path, flags: int, *, label: str) -> int:
-    nofollow = getattr(os, "O_NOFOLLOW", 0)
-    if not nofollow:
-        raise SourceGraphContractError("no-follow file opens are unavailable")
+def _read_graph_at(parent_fd: int, leaf: str) -> list[SourceRelationship]:
     try:
-        descriptor = os.open(
-            path,
-            flags
-            | nofollow
-            | getattr(os, "O_NONBLOCK", 0)
-            | getattr(os, "O_CLOEXEC", 0),
-            0o600,
-        )
-    except FileNotFoundError:
-        raise
-    except OSError as exc:
-        raise SourceGraphContractError(f"{label} must be a regular non-symlink file") from exc
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise SourceGraphContractError(f"{label} must be a regular non-symlink file")
-    except BaseException:
-        os.close(descriptor)
-        raise
-    return descriptor
-
-
-def _read_graph(path: Path) -> list[SourceRelationship]:
-    try:
-        descriptor = _open_regular_nofollow(path, os.O_RDONLY, label="source graph")
+        descriptor = open_regular_at(parent_fd, leaf, os.O_RDONLY)
     except FileNotFoundError:
         return []
+    except PathAuthorityError as exc:
+        raise SourceGraphContractError(
+            "source graph must be a regular non-symlink file"
+        ) from exc
     with os.fdopen(descriptor, "r", encoding="utf-8") as graph_file:
         graph_lines = graph_file.read().splitlines()
     relationships: list[SourceRelationship] = []
@@ -243,68 +221,88 @@ def _read_graph(path: Path) -> list[SourceRelationship]:
     return relationships
 
 
+def _read_graph(path: Path) -> list[SourceRelationship]:
+    try:
+        with bind_parent(path) as (parent_fd, leaf):
+            return _read_graph_at(parent_fd, leaf)
+    except (FileNotFoundError, PathAuthorityError) as exc:
+        raise SourceGraphContractError("source graph parent authority is unavailable") from exc
+
+
 def _append_new(path: Path, relationships: list[SourceRelationship]) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    lock_path = path.with_suffix(path.suffix + ".lock")
-    lock_fd = _open_regular_nofollow(
-        lock_path, os.O_RDWR | os.O_CREAT, label="source graph lock"
-    )
-    os.fchmod(lock_fd, 0o600)
-    with os.fdopen(lock_fd, "r+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        existing = _read_graph(path)
-        known = {item.relation_id for item in existing}
-        # Deduplicate the incoming batch itself before opening the append
-        # descriptor. Two identical relationships in one call are one edge;
-        # appending both would satisfy this call and then permanently break
-        # every later read of the durable graph.
-        novel: list[SourceRelationship] = []
-        batch_ids: set[str] = set()
-        for item in relationships:
-            if item.relation_id in known or item.relation_id in batch_ids:
-                continue
-            batch_ids.add(item.relation_id)
-            novel.append(item)
-        if not novel:
-            return 0
-        projected = known | batch_ids
-        if len(projected) != len(known) + len(novel):
-            raise SourceGraphContractError("projected source graph would contain duplicate relation IDs")
-        payload = b"".join(
-            json.dumps(
-                relationship.to_dict(),
-                sort_keys=True,
-                ensure_ascii=False,
-                allow_nan=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-            + b"\n"
-            for relationship in novel
-        )
-        fd = _open_regular_nofollow(
-            path, os.O_RDWR | os.O_CREAT, label="source graph"
-        )
-        original_size = os.fstat(fd).st_size
+    try:
+        parent_binding = bind_parent(path, create=True)
+        parent_fd, leaf = parent_binding.__enter__()
+    except (FileNotFoundError, PathAuthorityError) as exc:
+        raise SourceGraphContractError("source graph parent authority is unavailable") from exc
+    try:
         try:
-            os.fchmod(fd, 0o600)
-            os.lseek(fd, 0, os.SEEK_END)
-            written = 0
+            lock_fd = open_regular_at(parent_fd, leaf + ".lock", os.O_RDWR | os.O_CREAT)
+        except PathAuthorityError as exc:
+            raise SourceGraphContractError(
+                "source graph lock must be a regular non-symlink file"
+            ) from exc
+        os.fchmod(lock_fd, 0o600)
+        with os.fdopen(lock_fd, "r+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            existing = _read_graph_at(parent_fd, leaf)
+            known = {item.relation_id for item in existing}
+            # Deduplicate the incoming batch itself before opening the append
+            # descriptor. Two identical relationships in one call are one edge;
+            # appending both would satisfy this call and then permanently break
+            # every later read of the durable graph.
+            novel: list[SourceRelationship] = []
+            batch_ids: set[str] = set()
+            for item in relationships:
+                if item.relation_id in known or item.relation_id in batch_ids:
+                    continue
+                batch_ids.add(item.relation_id)
+                novel.append(item)
+            if not novel:
+                return 0
+            projected = known | batch_ids
+            if len(projected) != len(known) + len(novel):
+                raise SourceGraphContractError("projected source graph would contain duplicate relation IDs")
+            payload = b"".join(
+                json.dumps(
+                    relationship.to_dict(),
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                + b"\n"
+                for relationship in novel
+            )
             try:
-                while written < len(payload):
-                    count = os.write(fd, payload[written:])
-                    if count <= 0:
-                        raise OSError("source graph append made no progress")
-                    written += count
-                os.fsync(fd)
-            except BaseException:
-                # SIGALRM raises in-process. Restore the exact valid prefix before
-                # propagating so the next cycle never sees a truncated JSONL tail.
-                os.ftruncate(fd, original_size)
-                os.fsync(fd)
-                raise
-        finally:
-            os.close(fd)
-        return len(novel)
+                fd = open_regular_at(parent_fd, leaf, os.O_RDWR | os.O_CREAT)
+            except PathAuthorityError as exc:
+                raise SourceGraphContractError(
+                    "source graph must be a regular non-symlink file"
+                ) from exc
+            original_size = os.fstat(fd).st_size
+            try:
+                os.fchmod(fd, 0o600)
+                os.lseek(fd, 0, os.SEEK_END)
+                written = 0
+                try:
+                    while written < len(payload):
+                        count = os.write(fd, payload[written:])
+                        if count <= 0:
+                            raise OSError("source graph append made no progress")
+                        written += count
+                    os.fsync(fd)
+                except BaseException:
+                    # SIGALRM raises in-process. Restore the exact valid prefix before
+                    # propagating so the next cycle never sees a truncated JSONL tail.
+                    os.ftruncate(fd, original_size)
+                    os.fsync(fd)
+                    raise
+            finally:
+                os.close(fd)
+            return len(novel)
+    finally:
+        parent_binding.__exit__(None, None, None)
 
 
 def relationship_to_observation(relationship: SourceRelationship) -> CandidateObservation:

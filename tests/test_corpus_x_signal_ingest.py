@@ -225,6 +225,20 @@ class XSignalIngestTests(unittest.TestCase):
                 with self.assertRaisesRegex(XSignalContractError, "regular non-symlink"):
                     ingest_x_signals([self.signal()], output, max_items=10)
 
+    def test_symlinked_parent_component_cannot_redirect_projection_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            trusted = root / "trusted"
+            outside = root / "outside"
+            trusted.mkdir()
+            outside.mkdir()
+            (trusted / "link").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(XSignalContractError, "parent authority"):
+                ingest_x_signals(
+                    [self.signal()], trusted / "link" / "x-signals.json", max_items=10
+                )
+            self.assertEqual(list(outside.iterdir()), [])
+
     def test_graph_expansion_processes_only_the_current_bounded_batch(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
