@@ -45,7 +45,7 @@ def maya_claim(text: str, **overrides) -> dict:
         "entity_type": "creator",
         "canonical_url": "https://example.org/people/maya-chen",
         "title": "Maya Chen",
-        "entity_mention": "Maya Chen",
+        "entity_mention": "https://example.org/people/maya-chen",
         "relation_mention": "joined by",
         "evidence_quote": MAYA_QUOTE,
         "evidence_span": span_of(text, MAYA_QUOTE),
@@ -60,7 +60,7 @@ def ravi_claim(text: str, **overrides) -> dict:
         "entity_type": "creator",
         "canonical_url": "https://example.org/people/ravi-shah",
         "title": "Ravi Shah",
-        "entity_mention": "Ravi Shah",
+        "entity_mention": "https://example.org/people/ravi-shah",
         "relation_mention": "Our guest",
         "evidence_quote": RAVI_QUOTE,
         "evidence_span": span_of(text, RAVI_QUOTE),
@@ -152,14 +152,14 @@ class CrossFamilyRelationshipExtractionTests(unittest.TestCase):
                 ],
             )
 
-    def test_entity_mention_must_match_the_claimed_title(self):
+    def test_display_title_is_separate_from_canonical_locator_mention(self):
         text = self.youtube()
-        with self.assertRaisesRegex(RelationshipExtractionError, "entity mention"):
-            self.semantic(
-                text=text,
-                url=YOUTUBE_URL,
-                claims=[maya_claim(text, title="Somebody Else Entirely")],
-            )
+        relationships = self.semantic(
+            text=text,
+            url=YOUTUBE_URL,
+            claims=[maya_claim(text, title="Maya Chen, Recovery Engineer")],
+        )
+        self.assertEqual(relationships[0].title, "Maya Chen, Recovery Engineer")
 
     def test_semantic_name_without_canonical_locator_fails_closed(self):
         quote = "Today I am joined by Maya Chen, who built the recovery controller."
@@ -174,7 +174,7 @@ class CrossFamilyRelationshipExtractionTests(unittest.TestCase):
             "evidence_quote": quote,
             "evidence_span": span_of(text, quote),
         }
-        with self.assertRaisesRegex(RelationshipExtractionError, "canonical target"):
+        with self.assertRaisesRegex(RelationshipExtractionError, "canonical locator"):
             self.semantic(text=text, url=YOUTUBE_URL, claims=[claim])
 
     def test_canonical_target_must_match_locator_named_in_the_span(self):
@@ -187,6 +187,25 @@ class CrossFamilyRelationshipExtractionTests(unittest.TestCase):
             "entity_type": "repository",
             "canonical_url": "https://github.com/attacker/backdoor",
             "title": "https://github.com/example/good",
+            "entity_mention": "https://github.com/example/good",
+            "relation_mention": "depends on",
+            "evidence_quote": quote,
+            "evidence_span": span_of(text, quote),
+        }
+        with self.assertRaisesRegex(RelationshipExtractionError, "canonical target"):
+            self.semantic(text=text, url=YOUTUBE_URL, claims=[claim])
+
+    def test_multiple_urls_cannot_substitute_an_unrelated_canonical_target(self):
+        quote = (
+            "See https://github.com/attacker/backdoor for context; "
+            "https://github.com/example/good depends on the replay controller."
+        )
+        text = f"Intro. {quote} End."
+        claim = {
+            "relationship_type": "depends_on",
+            "entity_type": "repository",
+            "canonical_url": "https://github.com/attacker/backdoor",
+            "title": "Good repository",
             "entity_mention": "https://github.com/example/good",
             "relation_mention": "depends on",
             "evidence_quote": quote,

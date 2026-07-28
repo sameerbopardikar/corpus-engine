@@ -9,7 +9,6 @@ not grant rights, promote candidates, or mutate doctrine.
 from __future__ import annotations
 
 import hashlib
-import re
 from html.parser import HTMLParser
 from typing import Any, Iterable
 from urllib.parse import urlsplit
@@ -108,31 +107,23 @@ def _normalize_mention(value: str) -> str:
     return " ".join(value.split()).casefold()
 
 
-_URL_IN_TEXT = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
+def _entity_mention_binds_canonical_target(
+    canonical_url: str, entity_mention: str
+) -> bool:
+    """Require the declared entity mention itself to resolve to the target.
 
-
-def _span_binds_canonical_target(quote: str, canonical_url: str, entity_mention: str) -> bool:
-    """Require an exact canonical locator inside the validated span.
-
-    Natural-language names do not prove which external entity page a caller
-    selected; two hosts can publish the same slug or display name. Semantic
-    claims therefore require one URL in the preserved quote to canonicalize to
-    the claimed target. Structured adapters may resolve names from authoritative
-    source metadata separately.
+    Merely placing both an entity name and an unrelated URL somewhere in the
+    same span is not grounding. The exact mention admitted as the entity must be
+    a canonical locator for the durable target. Display titles remain separate.
     """
-    del entity_mention
     try:
         target = canonical_entity_identity(canonical_url)
+        mentioned_target = canonical_entity_identity(entity_mention)
     except EntityIdentityError as exc:
-        raise RelationshipExtractionError(f"canonical_url is invalid: {exc}") from exc
-    locators = []
-    for raw in _URL_IN_TEXT.findall(quote):
-        candidate = raw.rstrip(".,;:!?")
-        try:
-            locators.append(canonical_entity_identity(candidate))
-        except EntityIdentityError:
-            continue
-    return target in locators
+        raise RelationshipExtractionError(
+            f"entity mention and canonical_url must be canonical locators: {exc}"
+        ) from exc
+    return target == mentioned_target
 
 
 def _validated_span(value: Any, artifact_text: str, quote: str) -> tuple[int, int]:
@@ -208,15 +199,14 @@ def extract_semantic_relationships(
             raise RelationshipExtractionError(
                 "claimed entity mention does not appear in the validated span"
             )
-        if entity_mention != title:
-            raise RelationshipExtractionError(
-                "claimed entity mention does not match the claimed entity title"
-            )
-        if not _span_binds_canonical_target(
-            quote, _text("canonical_url", raw_claim["canonical_url"], 4096), raw_claim["entity_mention"]
+        if not title:
+            raise RelationshipExtractionError("claimed entity title must be non-blank")
+        if not _entity_mention_binds_canonical_target(
+            _text("canonical_url", raw_claim["canonical_url"], 4096),
+            _text("entity_mention", raw_claim["entity_mention"], 4096),
         ):
             raise RelationshipExtractionError(
-                "validated span does not bind the claimed canonical target"
+                "declared entity mention does not bind the claimed canonical target"
             )
         relation_mention = _normalize_mention(
             _text("relation_mention", raw_claim["relation_mention"], 1024)
@@ -225,7 +215,7 @@ def extract_semantic_relationships(
             raise RelationshipExtractionError(
                 "claimed relation mention does not appear in the validated span"
             )
-        if relation_mention == entity_mention:
+        if relation_mention in {entity_mention, title}:
             raise RelationshipExtractionError(
                 "claimed relation mention must bind the relation, not repeat the entity"
             )

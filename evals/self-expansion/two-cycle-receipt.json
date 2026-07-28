@@ -1,5 +1,5 @@
 {
-  "base_commit_at_run": "975bc873727c5cc21c6a07df6551e295f237c829",
+  "base_commit_at_run": "55702d380a2c97d63a4d30a96261e99677b6672f",
   "command": "python scripts/corpus_self_expansion_proof.py --config evals/self-expansion/fixtures/two-cycle-proof-config.json --run-root <isolated-run-root>",
   "cycle_a": {
     "promoted_watch_urls": [
@@ -76,11 +76,9 @@
   "shared_production_state_touched": false,
   "worker_visible_sha256": "57578c851b7a4457c0733402d517e86a5a82e2f84926273f9c19991814edf727",
   "working_tree_manifest_excluding_this_receipt": {
-    "evals/self-expansion/run-ledger.md": "690a0be60cb321d2eac40707e7c4580beb388bea3ccbc5de1b23e06cb73f5e94",
-    "src/corpus_relationship_extraction.py": "b32855475e8eaabd8ee6dec176a2550f9afa17b09df89b0ea0a1c013055b99ed",
-    "tests/fixtures/self_expansion/podcast-transcript.md": "f86d22687fe4c810bee5c073b251b92e59de86c326786268d8d23ca0e41d6790",
-    "tests/fixtures/self_expansion/youtube-transcript.md": "003982cda105de3e1a2f422ae554fca180b21e345daa8c2b37f61e62a08c80ef",
-    "tests/test_corpus_relationship_extraction.py": "903bfa85420a93f26bb2bc91f43731d49cab3d90f1d3214715d194272b3520a6"
+    "evals/self-expansion/run-ledger.md": "0d8e86d9247e94a21c93b57f85bab3fab0a5086f01828b49c3f762e1df6abe9a",
+    "src/corpus_relationship_extraction.py": "4bab81bee1228cb3a85d220858d0605e0d2b2cdf560728617ecd7649910bb297",
+    "tests/test_corpus_relationship_extraction.py": "2f9c76f99e24d4ff246f4644536d63e219d31771113dc95f1cd876422661561e"
   },
-  "working_tree_manifest_sha256": "98994c080af00610afca75f54b57a6913e59904f9360d764ccbd416eed0b9ae9"
+  "working_tree_manifest_sha256": "53694d053a16157328f01d502861687ec97b91205779a4e095a0f3730a98d3c1"
 }
