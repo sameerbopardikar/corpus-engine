@@ -194,7 +194,10 @@ def _open_regular_nofollow(path: Path, flags: int, *, label: str) -> int:
     try:
         descriptor = os.open(
             path,
-            flags | nofollow | getattr(os, "O_CLOEXEC", 0),
+            flags
+            | nofollow
+            | getattr(os, "O_NONBLOCK", 0)
+            | getattr(os, "O_CLOEXEC", 0),
             0o600,
         )
     except FileNotFoundError:

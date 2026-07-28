@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -13,6 +14,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from corpus_source_graph import SourceGraphContractError
 from corpus_x_signal_ingest import XSignalContractError, ingest_x_signals
 
 
@@ -182,6 +184,46 @@ class XSignalIngestTests(unittest.TestCase):
                     domain="agentic-engineering",
                 )
             self.assertFalse(output.exists())
+
+    def test_graph_fifo_fails_before_publishing_the_x_projection(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "x-signals.json"
+            graph = root / "source-graph.jsonl"
+            discovery = root / "discovery-ledger.jsonl"
+            ingest_x_signals([self.signal()], output, max_items=10)
+            before = output.read_bytes()
+            os.mkfifo(graph, 0o600)
+            with self.assertRaisesRegex(SourceGraphContractError, "regular non-symlink"):
+                ingest_x_signals(
+                    [
+                        self.signal(
+                            url="https://x.com/builder/status/204",
+                            thread_id="x-thread-204",
+                        )
+                    ],
+                    output,
+                    max_items=10,
+                    domain="agentic-engineering",
+                    source_graph_path=graph,
+                    discovery_ledger_path=discovery,
+                )
+            self.assertEqual(output.read_bytes(), before)
+            self.assertFalse(discovery.exists())
+
+    def test_projection_and_projection_lock_fifos_reject_immediately(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for output, fifo in (
+                (root / "projection-fifo.json", root / "projection-fifo.json"),
+                (
+                    root / "lock-fifo.json",
+                    root / "lock-fifo.json.lock",
+                ),
+            ):
+                os.mkfifo(fifo, 0o600)
+                with self.assertRaisesRegex(XSignalContractError, "regular non-symlink"):
+                    ingest_x_signals([self.signal()], output, max_items=10)
 
     def test_graph_expansion_processes_only_the_current_bounded_batch(self):
         with tempfile.TemporaryDirectory() as td:

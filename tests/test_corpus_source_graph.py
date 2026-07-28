@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -103,6 +105,28 @@ class SourceGraphExpansionTests(unittest.TestCase):
             )
         self.assertEqual(outside_lock.read_bytes(), b"outside lock bytes\n")
         self.assertFalse(self.graph.exists())
+
+    def test_graph_and_lock_fifos_reject_immediately(self):
+        for fifo_path in (
+            self.graph,
+            self.graph.with_suffix(self.graph.suffix + ".lock"),
+        ):
+            with self.subTest(fifo=fifo_path.name):
+                fifo_path.parent.mkdir(parents=True, exist_ok=True)
+                os.mkfifo(fifo_path, 0o600)
+                started = time.monotonic()
+                with self.assertRaisesRegex(SourceGraphContractError, "regular non-symlink"):
+                    ingest_relationships(
+                        [self.relation()],
+                        graph_path=self.graph,
+                        discovery_ledger_path=self.discovery,
+                    )
+                self.assertLess(time.monotonic() - started, 0.5)
+                if fifo_path.exists():
+                    fifo_path.unlink()
+                lock_path = self.graph.with_suffix(self.graph.suffix + ".lock")
+                if lock_path.exists():
+                    lock_path.unlink()
 
     def test_unseen_entities_from_multiple_source_families_enter_one_candidate_graph(self):
         relationships = [

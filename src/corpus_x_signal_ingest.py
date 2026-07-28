@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import stat
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -94,12 +95,42 @@ def _normalize_signal(value: Any) -> dict[str, Any]:
     }
 
 
+def _open_regular_nofollow(path: Path, flags: int, *, label: str) -> int:
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        raise XSignalContractError("no-follow file opens are unavailable")
+    try:
+        descriptor = os.open(
+            path,
+            flags
+            | nofollow
+            | getattr(os, "O_NONBLOCK", 0)
+            | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        raise XSignalContractError(f"{label} must be a regular non-symlink file") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise XSignalContractError(f"{label} must be a regular non-symlink file")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
 def _read_existing(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
+    try:
+        descriptor = _open_regular_nofollow(path, os.O_RDONLY, label="X projection")
+    except FileNotFoundError:
         return None
     try:
+        with os.fdopen(descriptor, "r", encoding="utf-8") as projection_file:
+            encoded = projection_file.read()
         value = json.loads(
-            path.read_text(encoding="utf-8"),
+            encoded,
             parse_constant=lambda item: (_ for _ in ()).throw(ValueError(f"non-finite value: {item}")),
         )
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -217,7 +248,9 @@ def ingest_x_signals(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = output_path.with_suffix(output_path.suffix + ".lock")
-    lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    lock_fd = _open_regular_nofollow(
+        lock_path, os.O_RDWR | os.O_CREAT, label="X projection lock"
+    )
     os.fchmod(lock_fd, 0o600)
     with os.fdopen(lock_fd, "r+") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
@@ -237,9 +270,6 @@ def ingest_x_signals(
 
         projection = _project(by_url)
         encoded = (json.dumps(projection, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
-        if not (output_path.exists() and output_path.read_bytes() == encoded):
-            _atomic_write(output_path, encoded)
-
         if graph_relationships is not None:
             from corpus_source_graph import ingest_relationships
 
@@ -251,4 +281,6 @@ def ingest_x_signals(
                 discovery_ledger_path=Path(discovery_ledger_path),
                 max_items=1000,
             )
+        if existing != projection:
+            _atomic_write(output_path, encoded)
         return projection
