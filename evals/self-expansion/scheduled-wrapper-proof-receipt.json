@@ -1,11 +1,12 @@
 {
+  "code_commit_at_run": "ae31186572d916721b16182414fbf8a12aaf9b5e",
   "global_cycle_status": "planned",
   "legacy_shims_disabled": true,
   "mode": "isolated-dry-global-cycle-plus-opt-in-self-expansion-proof",
   "production_cron_modified": false,
   "proof_receipt_bytes": 11013,
-  "proof_receipt_sha256": "9741a3bd166ac966b50ec081706f31e135a38395a3e5ffc2cae3548de1a564bf",
-  "schema_version": 1,
+  "proof_receipt_sha256": "082e6a10beb75bc31c792c992865b3c335e7be17dd078232614779231a26e457",
+  "schema_version": 2,
   "self_expansion_gates": {
     "candidate_promotion": true,
     "durable_inspection": true,
@@ -15,5 +16,6 @@
     "unknown_concept": true
   },
   "self_expansion_status": "passed",
+  "shared_production_state_touched": false,
   "wrapper": "scripts/corpus_engine_cycle_v1.sh"
 }
