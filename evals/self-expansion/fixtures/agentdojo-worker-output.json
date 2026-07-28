@@ -1,0 +1,60 @@
+{
+  "concept_candidates": [
+    {
+      "statement": "AgentDojo exposes a configurable benchmark runner that composes a selected task suite and user tasks with a specified LLM, defense, and attack—such as a tool-filter defense against a tool-knowledge attack—and can scale the same configuration across all suites and tasks, with outputs inspectable through a dedicated results page and benchmark registry.",
+      "evidence_pointers": [
+        "https://github.com/ethz-spylab/agentdojo"
+      ]
+    }
+  ],
+  "discovered_relationships": [
+    {
+      "entity_type": "creator",
+      "title": "Edoardo Debenedetti",
+      "canonical_url": "https://edoardo.science",
+      "relationship_type": "authored"
+    },
+    {
+      "entity_type": "creator",
+      "title": "Jie Zhang",
+      "canonical_url": "https://zj-jayzhang.github.io",
+      "relationship_type": "authored"
+    },
+    {
+      "entity_type": "creator",
+      "title": "Mislav Balunović",
+      "canonical_url": "https://www.sri.inf.ethz.ch/people/mislav",
+      "relationship_type": "authored"
+    },
+    {
+      "entity_type": "creator",
+      "title": "Luca Beurer-Kellner",
+      "canonical_url": "https://www.sri.inf.ethz.ch/people/luca",
+      "relationship_type": "authored"
+    },
+    {
+      "entity_type": "creator",
+      "title": "Marc Fischer",
+      "canonical_url": "https://marcfischer.at",
+      "relationship_type": "authored"
+    },
+    {
+      "entity_type": "creator",
+      "title": "Florian Tramèr",
+      "canonical_url": "https://floriantramer.com",
+      "relationship_type": "authored"
+    },
+    {
+      "entity_type": "paper",
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "canonical_url": "https://arxiv.org/abs/2406.13352",
+      "relationship_type": "cited"
+    },
+    {
+      "entity_type": "document",
+      "title": "AgentDojo Results",
+      "canonical_url": "https://agentdojo.spylab.ai/results/",
+      "relationship_type": "linked_primary_source"
+    }
+  ]
+}
