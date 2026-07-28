@@ -8,8 +8,13 @@ bodies and watch candidates must already carry explicit body-inspection rights.
 from __future__ import annotations
 
 import json
+import os
 import re
+import signal
+import stat
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,6 +35,62 @@ _DOMAIN = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 
 class SelfExpansionCycleError(ValueError):
     """The self-expansion configuration or state cannot be safely processed."""
+
+
+class SelfExpansionDeadlineExceeded(SelfExpansionCycleError):
+    """The hard self-expansion wall-clock deadline expired."""
+
+
+def _reject_symlink_components(path: Path) -> Path:
+    """Return an absolute path only when every existing component is non-symlink."""
+    absolute = Path(os.path.abspath(os.fspath(path.expanduser())))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            # Once a component does not exist, no descendant can exist yet.
+            break
+        if stat.S_ISLNK(mode):
+            raise SelfExpansionCycleError(
+                f"state authority path contains symlink component: {current}"
+            )
+    return absolute
+
+
+def _deadline_check(started: float, maximum: float, monotonic) -> None:
+    if monotonic() - started >= maximum:
+        raise SelfExpansionDeadlineExceeded("max_wall_seconds exceeded")
+
+
+@contextmanager
+def _hard_wall_deadline(seconds: float, *, enabled: bool):
+    """Preempt a stalled phase on POSIX while preserving any prior alarm."""
+    if not enabled or threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    started = time.monotonic()
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_delay, previous_interval = signal.getitimer(signal.ITIMER_REAL)
+
+    def _expired(_signum, _frame):
+        raise SelfExpansionDeadlineExceeded("max_wall_seconds exceeded")
+
+    signal.signal(signal.SIGALRM, _expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_delay > 0:
+            elapsed = time.monotonic() - started
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(0.000001, previous_delay - elapsed),
+                previous_interval,
+            )
 
 
 def _positive_int(config: dict[str, Any], name: str, *, maximum: int) -> int:
@@ -98,6 +159,23 @@ def _load_config(value: dict[str, Any]) -> dict[str, Any]:
     normalized["max_artifact_bytes"] = _positive_int(
         value, "max_artifact_bytes", maximum=8 * 1024 * 1024
     )
+    bounded = dict(value)
+    bounded.setdefault("max_source_artifacts_per_cycle", 8)
+    bounded.setdefault("max_artifacts_per_inspection", 4)
+    bounded.setdefault("max_total_artifact_bytes_per_cycle", normalized["max_artifact_bytes"])
+    bounded.setdefault("max_relationships_per_cycle", normalized["max_relationships_per_artifact"])
+    normalized["max_source_artifacts_per_cycle"] = _positive_int(
+        bounded, "max_source_artifacts_per_cycle", maximum=100
+    )
+    normalized["max_artifacts_per_inspection"] = _positive_int(
+        bounded, "max_artifacts_per_inspection", maximum=100
+    )
+    normalized["max_total_artifact_bytes_per_cycle"] = _positive_int(
+        bounded, "max_total_artifact_bytes_per_cycle", maximum=64 * 1024 * 1024
+    )
+    normalized["max_relationships_per_cycle"] = _positive_int(
+        bounded, "max_relationships_per_cycle", maximum=10000
+    )
     normalized["max_wall_seconds"] = _positive_number(
         value, "max_wall_seconds", maximum=3600
     )
@@ -105,25 +183,28 @@ def _load_config(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _paths(state_root: Path, domain: str, state_path: str | None = None) -> dict[str, Path]:
-    base = state_root.expanduser().resolve()
-    domain_base = (base / domain).resolve()
-    try:
-        domain_base.relative_to(base)
-    except ValueError as exc:
-        raise SelfExpansionCycleError("domain state root escapes state_root") from exc
+    base = _reject_symlink_components(state_root)
+    domain_base = base / domain
+    _reject_symlink_components(domain_base)
     if state_path is None:
         root = domain_base
     else:
         relative = Path(state_path)
-        if relative.is_absolute() or not relative.parts or relative.parts[0] != domain:
+        if (
+            relative.is_absolute()
+            or not relative.parts
+            or relative.parts[0] != domain
+            or any(part in {"", ".", ".."} for part in relative.parts)
+        ):
             raise SelfExpansionCycleError(
                 "state_path must be a relative path rooted beneath its domain"
             )
-        root = (base / relative).resolve()
+        root = base.joinpath(*relative.parts)
         try:
             root.relative_to(domain_base)
         except ValueError as exc:
             raise SelfExpansionCycleError("state_path escapes its domain state root") from exc
+        _reject_symlink_components(root)
     return {
         "root": root,
         "ledger": root / "discovery-ledger.jsonl",
@@ -134,13 +215,8 @@ def _paths(state_root: Path, domain: str, state_path: str | None = None) -> dict
     }
 
 
-def _candidate_guard(ledger: Path, maximum: int) -> int:
-    count = len(DiscoveryEngine(ledger).candidates)
-    if count > maximum:
-        raise SelfExpansionCycleError(
-            f"candidate count {count} exceeds max_candidates_per_cycle {maximum}"
-        )
-    return count
+def _candidate_count(ledger: Path) -> int:
+    return len(DiscoveryEngine(ledger).candidates)
 
 
 def _due_work_ids(ledger: Path, now: datetime) -> set[str]:
@@ -184,11 +260,16 @@ def _run_domain(
         raise SelfExpansionCycleError("source_artifacts, rights_assertions, and inspections must be lists")
     if any("relationships" in item for item in inspections if isinstance(item, dict)):
         raise SelfExpansionCycleError("inspection relationships cannot be supplied")
+    if len(source_artifacts) > config["max_source_artifacts_per_cycle"]:
+        raise SelfExpansionCycleError(
+            "source_artifacts exceed max_source_artifacts_per_cycle"
+        )
 
     paths = _paths(
         Path(config["state_root"]), domain, domain_config.get("state_path")
     )
     pre_due_engine = DiscoveryEngine(paths["ledger"])
+    initial_candidate_count = len(pre_due_engine.candidates)
     leased_at_start = {
         item.work_id for item in pre_due_engine.work_items.values() if item.state == "leased"
     }
@@ -198,24 +279,35 @@ def _run_domain(
     failures: list[dict[str, str]] = []
     source_receipts: list[dict[str, Any]] = []
     source_relationships = 0
+    artifact_bytes_used = 0
+    relationships_used = 0
     appended = 0
     produced = []
 
     for index, artifact in enumerate(source_artifacts):
-        if monotonic() - started > config["max_wall_seconds"]:
-            failures.append({"stage": "source_artifact", "error": "max_wall_seconds exceeded"})
-            break
+        _deadline_check(started, config["max_wall_seconds"], monotonic)
         try:
+            remaining_bytes = config["max_total_artifact_bytes_per_cycle"] - artifact_bytes_used
+            remaining_relationships = config["max_relationships_per_cycle"] - relationships_used
+            if remaining_bytes <= 0 or remaining_relationships <= 0:
+                raise SelfExpansionCycleError("self-expansion aggregate budget exhausted")
             receipt, relationships = project_preserved_source_artifact(
                 domain=domain,
                 request=artifact,
                 preserve_root=paths["artifacts"],
-                max_artifact_bytes=config["max_artifact_bytes"],
-                max_relationships=config["max_relationships_per_artifact"],
+                max_artifact_bytes=min(config["max_artifact_bytes"], remaining_bytes),
+                max_relationships=min(
+                    config["max_relationships_per_artifact"], remaining_relationships
+                ),
             )
+            _deadline_check(started, config["max_wall_seconds"], monotonic)
+            artifact_bytes_used += receipt["byte_length"]
+            relationships_used += len(relationships)
             source_receipts.append(receipt)
             source_relationships += len(relationships)
             produced.extend(relationships)
+        except SelfExpansionDeadlineExceeded:
+            raise
         except Exception as exc:
             failures.append({"stage": f"source_artifact[{index}]", "error": f"{type(exc).__name__}: {exc}"})
 
@@ -228,7 +320,11 @@ def _run_domain(
     projected_identities = set(existing_identities)
     for relationship in produced:
         identity = canonical_entity_identity(relationship.canonical_url)
-        if identity not in projected_identities and len(projected_identities) >= config["max_candidates_per_cycle"]:
+        if (
+            identity not in projected_identities
+            and len(projected_identities) - len(existing_identities)
+            >= config["max_candidates_per_cycle"]
+        ):
             failures.append({
                 "stage": "candidate_cap",
                 "error": "relationship projection would exceed max_candidates_per_cycle",
@@ -276,10 +372,13 @@ def _run_domain(
                 basis="explicit-body-authorization",
                 asserted_at=_iso(now),
             )
+            _deadline_check(started, config["max_wall_seconds"], monotonic)
+        except SelfExpansionDeadlineExceeded:
+            raise
         except Exception as exc:
             failures.append({"stage": f"rights_assertion[{index}]", "error": f"{type(exc).__name__}: {exc}"})
 
-    candidate_count = _candidate_guard(paths["ledger"], config["max_candidates_per_cycle"])
+    candidate_count = _candidate_count(paths["ledger"])
     policy = None
     if config["promotion_mode"] == "live":
         policy = evaluate_candidates(
@@ -291,19 +390,29 @@ def _run_domain(
 
     inspection_results: list[dict[str, Any]] = []
     consumed = 0
+    attempted = 0
     recovered = 0
     for index, inspection in enumerate(inspections):
-        if consumed >= config["max_inspections_per_cycle"]:
-            break
-        if monotonic() - started > config["max_wall_seconds"]:
-            failures.append({"stage": "inspection", "error": "max_wall_seconds exceeded"})
-            break
+        _deadline_check(started, config["max_wall_seconds"], monotonic)
         try:
             work_id = _inspection_work_id(paths["ledger"], paths["watch"], inspection)
-            if work_id is None or work_id not in due_at_start:
-                continue
+        except SelfExpansionDeadlineExceeded:
+            raise
+        except Exception as exc:
+            failures.append({"stage": f"inspection[{index}]", "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        if work_id is None or work_id not in due_at_start:
+            continue
+        if attempted >= config["max_inspections_per_cycle"]:
+            break
+        attempted += 1
+        try:
             if work_id in leased_at_start:
                 recovered += 1
+            remaining_bytes = config["max_total_artifact_bytes_per_cycle"] - artifact_bytes_used
+            remaining_relationships = config["max_relationships_per_cycle"] - relationships_used
+            if remaining_bytes <= 0 or remaining_relationships <= 0:
+                raise SelfExpansionCycleError("self-expansion aggregate budget exhausted")
             result = run_watch_inspection(
                 domain=domain,
                 watch_projection_path=paths["watch"],
@@ -313,16 +422,30 @@ def _run_domain(
                 preserve_root=paths["artifacts"],
                 receipts_root=paths["receipts"],
                 now=now,
-                max_artifact_bytes=config["max_artifact_bytes"],
-                max_relationships_per_artifact=config["max_relationships_per_artifact"],
-                max_candidate_count=config["max_candidates_per_cycle"],
+                max_artifact_bytes=min(config["max_artifact_bytes"], remaining_bytes),
+                max_artifacts_per_inspection=config["max_artifacts_per_inspection"],
+                max_total_artifact_bytes=remaining_bytes,
+                max_relationships_per_artifact=min(
+                    config["max_relationships_per_artifact"], remaining_relationships
+                ),
+                max_total_relationships=remaining_relationships,
+                max_candidate_count=initial_candidate_count + config["max_candidates_per_cycle"],
             )
+            _deadline_check(started, config["max_wall_seconds"], monotonic)
+            artifact_bytes_used += result["artifact_bytes_preserved"]
+            relationships_used += result["relationships_derived"]
             inspection_results.append(result)
             consumed += result["processed_inspections"]
+        except SelfExpansionDeadlineExceeded:
+            raise
         except Exception as exc:
             failures.append({"stage": f"inspection[{index}]", "error": f"{type(exc).__name__}: {exc}"})
 
-    candidate_count_after = _candidate_guard(paths["ledger"], config["max_candidates_per_cycle"])
+    candidate_count_after = _candidate_count(paths["ledger"])
+    if candidate_count_after - initial_candidate_count > config["max_candidates_per_cycle"]:
+        raise SelfExpansionCycleError(
+            "self-expansion exceeded max_candidates_per_cycle additions"
+        )
     post_policy = None
     if config["promotion_mode"] == "live" and consumed:
         post_policy = evaluate_candidates(
@@ -338,6 +461,8 @@ def _run_domain(
         "source_artifacts_processed": len(source_receipts),
         "source_artifact_receipts": source_receipts,
         "source_relationships_derived": source_relationships,
+        "artifact_bytes_used": artifact_bytes_used,
+        "relationships_used": relationships_used,
         "relationships_appended": appended + sum(
             item["relationships_appended"] for item in inspection_results
         ),
@@ -346,6 +471,7 @@ def _run_domain(
         "policy": policy,
         "post_inspection_policy": post_policy,
         "due_work_ids_at_cycle_start": sorted(due_at_start),
+        "inspections_attempted": attempted,
         "inspections_consumed": consumed,
         "expired_leases_recovered": recovered,
         "consumed_work_ids": [
@@ -367,21 +493,32 @@ def run_self_expansion_cycle(
     started = monotonic()
     domains: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
-    for index, domain_config in enumerate(config["domains"]):
-        try:
-            if not isinstance(domain_config, dict):
-                raise SelfExpansionCycleError("domain configuration must be an object")
-            domains.append(
-                _run_domain(
-                    domain_config,
-                    config=config,
-                    now=now,
-                    started=started,
-                    monotonic=monotonic,
+    with _hard_wall_deadline(
+        config["max_wall_seconds"], enabled=monotonic is time.monotonic
+    ):
+        for index, domain_config in enumerate(config["domains"]):
+            try:
+                _deadline_check(started, config["max_wall_seconds"], monotonic)
+                if not isinstance(domain_config, dict):
+                    raise SelfExpansionCycleError("domain configuration must be an object")
+                domains.append(
+                    _run_domain(
+                        domain_config,
+                        config=config,
+                        now=now,
+                        started=started,
+                        monotonic=monotonic,
+                    )
                 )
-            )
-        except Exception as exc:
-            failures.append({"domain_index": str(index), "error": f"{type(exc).__name__}: {exc}"})
+                _deadline_check(started, config["max_wall_seconds"], monotonic)
+            except SelfExpansionDeadlineExceeded as exc:
+                failures.append({
+                    "domain_index": str(index),
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+                break
+            except Exception as exc:
+                failures.append({"domain_index": str(index), "error": f"{type(exc).__name__}: {exc}"})
     return {
         "schema_version": 1,
         "enabled": True,
@@ -392,9 +529,13 @@ def run_self_expansion_cycle(
             key: config[key]
             for key in (
                 "max_inspections_per_cycle",
+                "max_source_artifacts_per_cycle",
+                "max_artifacts_per_inspection",
                 "max_relationships_per_artifact",
+                "max_relationships_per_cycle",
                 "max_candidates_per_cycle",
                 "max_artifact_bytes",
+                "max_total_artifact_bytes_per_cycle",
                 "max_wall_seconds",
             )
         },

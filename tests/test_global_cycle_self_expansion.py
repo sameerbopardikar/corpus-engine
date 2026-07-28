@@ -6,9 +6,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -149,9 +151,36 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         config["domains"][0]["state_path"] = f"{DOMAIN}/../../training"
         receipt = run_self_expansion_cycle(config, now=NOW_A)
         self.assertEqual(receipt["status"], "partial_failure")
-        self.assertTrue(any("escapes" in item["error"] for item in receipt["failures"]))
+        self.assertTrue(any("state_path" in item["error"] for item in receipt["failures"]))
         self.assertEqual(sentinel.read_bytes(), before)
         self.assertEqual(list((state / "training").iterdir()), [sentinel])
+
+    def test_domain_root_symlink_cannot_redirect_into_sibling_domain(self):
+        state = self.tmp / "corpora"
+        training = state / "training"
+        training.mkdir(parents=True)
+        sentinel = training / "sentinel.json"
+        sentinel.write_text('{"authority":"unchanged"}\n')
+        (state / DOMAIN).symlink_to(training, target_is_directory=True)
+        config = _config(state)
+        config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
+        receipt = run_self_expansion_cycle(config, now=NOW_A)
+        self.assertEqual(receipt["status"], "partial_failure")
+        self.assertTrue(any("symlink component" in item["error"] for item in receipt["failures"]))
+        self.assertEqual(list(training.iterdir()), [sentinel])
+
+    def test_dangling_nested_state_symlink_fails_closed(self):
+        state = self.tmp / "corpora"
+        domain_root = state / DOMAIN
+        domain_root.mkdir(parents=True)
+        nested = domain_root / "self-expansion-v1"
+        nested.symlink_to(state / "missing-target", target_is_directory=True)
+        config = _config(state)
+        config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
+        receipt = run_self_expansion_cycle(config, now=NOW_A)
+        self.assertEqual(receipt["status"], "partial_failure")
+        self.assertTrue(any("symlink component" in item["error"] for item in receipt["failures"]))
+        self.assertFalse((state / "missing-target").exists())
 
     def test_injected_monotonic_clock_enforces_wall_cap(self):
         config = _config(self.tmp / "state")
@@ -159,9 +188,34 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         receipt = run_self_expansion_cycle(
             config, now=NOW_A, monotonic=lambda: next(ticks, 21.0)
         )
-        failures = receipt["domains"][0]["failures"]
-        self.assertTrue(any("max_wall_seconds" in item["error"] for item in failures), failures)
-        self.assertEqual(receipt["domains"][0]["source_artifacts_processed"], 0)
+        self.assertEqual(receipt["status"], "partial_failure")
+        self.assertEqual(receipt["domains"], [])
+        self.assertTrue(
+            any("max_wall_seconds" in item["error"] for item in receipt["failures"]),
+            receipt["failures"],
+        )
+
+    def test_hard_wall_clock_preempts_stalled_artifact_operation(self):
+        config = _config(self.tmp / "state")
+        config["max_wall_seconds"] = 0.05
+
+        def stalled(*_args, **_kwargs):
+            time.sleep(0.5)
+            raise AssertionError("hard wall clock failed to preempt operation")
+
+        started = time.monotonic()
+        with patch(
+            "corpus_self_expansion_cycle.project_preserved_source_artifact",
+            side_effect=stalled,
+        ):
+            receipt = run_self_expansion_cycle(config, now=NOW_A)
+        elapsed = time.monotonic() - started
+        self.assertLess(elapsed, 0.25)
+        self.assertEqual(receipt["status"], "partial_failure")
+        self.assertTrue(
+            any("max_wall_seconds" in item["error"] for item in receipt["failures"]),
+            receipt["failures"],
+        )
 
     def test_two_cycles_persist_then_consume_exact_work_and_derive_second_order(self):
         config = _config(self.tmp / "state")
@@ -206,6 +260,23 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         self.assertIn("digest mismatch", failures)
         self.assertEqual(receipt["status"], "partial_failure")
 
+    def test_inspection_cap_counts_failed_attempts(self):
+        config = _config(self.tmp / "state")
+        first = run_self_expansion_cycle(config, now=NOW_A)
+        self.assertEqual(len(first["domains"][0]["policy"]["watch_work_ids"]), 1)
+        bad = _inspection()
+        bad["artifacts"][0]["content_sha256"] = "0" * 64
+        config["max_inspections_per_cycle"] = 1
+        config["domains"][0]["inspections"] = [bad, json.loads(json.dumps(bad))]
+        second = run_self_expansion_cycle(config, now=NOW_B)
+        domain = second["domains"][0]
+        self.assertEqual(domain["inspections_attempted"], 1)
+        self.assertEqual(domain["inspections_consumed"], 0)
+        inspection_failures = [
+            item for item in domain["failures"] if item["stage"].startswith("inspection[")
+        ]
+        self.assertEqual(len(inspection_failures), 1)
+
     def test_multiple_url_substitution_is_rejected(self):
         config = _config(self.tmp / "state")
         artifact = _semantic_artifact(
@@ -234,16 +305,32 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         self.assertEqual(unrelated.read_bytes(), before)
         self.assertEqual(list((state / "training").iterdir()), [unrelated])
 
-    def test_candidate_cap_blocks_second_order_projection(self):
+    def test_candidate_cap_limits_new_additions_without_stalling_mature_corpus(self):
         config = _config(self.tmp / "state")
         config["max_candidates_per_cycle"] = 1
+        blocked = "https://example.org/people/blocked-this-cycle"
+        config["domains"][0]["source_artifacts"].append(
+            _semantic_artifact(
+                "https://third.example.net/item/3",
+                "independent-third-source",
+                blocked,
+            )
+        )
         first = run_self_expansion_cycle(config, now=NOW_A)
-        self.assertEqual(len(first["domains"][0]["policy"]["watch_work_ids"]), 1)
+        domain_first = first["domains"][0]
+        self.assertEqual(len(domain_first["policy"]["watch_work_ids"]), 1)
+        self.assertTrue(
+            any("max_candidates_per_cycle" in item["error"] for item in domain_first["failures"]),
+            domain_first["failures"],
+        )
+        config["domains"][0]["source_artifacts"] = config["domains"][0]["source_artifacts"][:2]
         second = run_self_expansion_cycle(config, now=NOW_B)
-        failures = second["domains"][0]["failures"]
-        self.assertTrue(any("max_candidates_per_cycle" in item["error"] for item in failures), failures)
+        self.assertEqual(second["domains"][0]["failures"], [])
         engine = DiscoveryEngine(self.tmp / "state" / DOMAIN / "discovery-ledger.jsonl")
-        self.assertEqual(len(engine.candidates), 1)
+        urls = {item.canonical_url for item in engine.candidates.values()}
+        self.assertNotIn(blocked, urls)
+        self.assertIn(SECOND_ORDER, urls)
+        self.assertEqual(len(engine.candidates), 2)
 
     def test_exact_scheduler_wrapper_two_cycle_simulation_is_semantically_repeatable(self):
         def run_pair(root: Path):

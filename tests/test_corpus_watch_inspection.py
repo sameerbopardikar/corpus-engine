@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -166,9 +167,52 @@ class WatchInspectionTests(unittest.TestCase):
         manifest_path = Path(proof["artifact_path"])
         self.assertEqual(sha256(manifest_path.read_bytes()), proof["artifact_sha256"])
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["transaction_phase"], "prepared")
+        self.assertGreater(len(manifest["intended_relationships"]), 0)
         self.assertEqual(
             [item["sha256"] for item in manifest["artifact_receipts"]],
             [sha256(self.repository_bytes)],
+        )
+
+    def test_manifest_failure_precedes_all_canonical_relationship_mutation(self):
+        policy = self.promote_watch_source()
+        work_id = policy["watch_work_ids"][0]
+        before_candidates = set(DiscoveryEngine(self.ledger).candidates)
+        with patch(
+            "corpus_watch_inspection._write_manifest",
+            side_effect=OSError("injected manifest persistence failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "manifest persistence"):
+                self.inspect(
+                    [{"watch_source_url": WATCH_SOURCE, "artifacts": [self.artifact()]}]
+                )
+        engine = DiscoveryEngine(self.ledger)
+        self.assertEqual(set(engine.candidates), before_candidates)
+        self.assertEqual(engine.work_items[work_id].state, "pending")
+        self.assertEqual(engine.work_items[work_id].proof_receipts, ())
+        self.assertFalse((self.receipts / f"proof-{work_id}.json").exists())
+
+    def test_prepared_journal_recovers_after_post_mutation_completion_failure(self):
+        policy = self.promote_watch_source()
+        work_id = policy["watch_work_ids"][0]
+        inspection = {"watch_source_url": WATCH_SOURCE, "artifacts": [self.artifact()]}
+        with patch(
+            "corpus_watch_inspection.DiscoveryEngine.complete_work",
+            side_effect=OSError("injected completion failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "completion failure"):
+                self.inspect([inspection])
+        pending = DiscoveryEngine(self.ledger)
+        self.assertEqual(pending.work_items[work_id].state, "pending")
+        self.assertTrue((self.receipts / f"proof-{work_id}.json").is_file())
+        line_count = len(self.graph.read_text(encoding="utf-8").splitlines())
+
+        recovered = self.inspect([inspection], now=NOW + timedelta(days=1))
+        self.assertEqual(recovered["consumed_work_ids"], [work_id])
+        self.assertEqual(DiscoveryEngine(self.ledger).work_items[work_id].state, "done")
+        self.assertEqual(
+            len(self.graph.read_text(encoding="utf-8").splitlines()),
+            line_count,
         )
 
     def test_child_artifact_linked_from_preserved_parent_bytes_is_admitted(self):
@@ -305,6 +349,29 @@ class WatchInspectionTests(unittest.TestCase):
                         "artifacts": [self.artifact(content_sha256=sha256(b"different bytes"))],
                     }
                 ]
+            )
+
+    def test_artifact_fanout_cap_counts_requests_before_fetch(self):
+        self.promote_watch_source()
+        with self.assertRaisesRegex(WatchInspectionError, "artifact count"):
+            self.inspect(
+                [{"watch_source_url": WATCH_SOURCE, "artifacts": [self.artifact(), self.artifact()]}],
+                max_artifacts_per_inspection=1,
+            )
+        self.assertEqual(len(list(self.preserve.glob("*.bin"))), 0)
+
+    def test_content_path_symlink_is_never_followed(self):
+        self.promote_watch_source()
+        target = self.root / "artifact.json"
+        target.write_bytes(self.repository_bytes)
+        link = self.root / "artifact-link.json"
+        link.symlink_to(target)
+        request = self.artifact()
+        request.pop("content_bytes")
+        request["content_path"] = str(link)
+        with self.assertRaisesRegex(WatchInspectionError, "non-symlink"):
+            self.inspect(
+                [{"watch_source_url": WATCH_SOURCE, "artifacts": [request]}]
             )
 
     def test_watch_entry_without_a_live_queue_item_fails_closed(self):

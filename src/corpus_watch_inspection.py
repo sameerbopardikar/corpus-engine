@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -153,9 +154,23 @@ def _request_bytes(
         body = request["content"].encode("utf-8")
     else:
         path = Path(_text("content_path", request["content_path"]))
-        if path.is_symlink() or not path.is_file():
-            raise WatchInspectionError("content_path must be a regular non-symlink file")
-        body = path.read_bytes()
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as exc:
+            raise WatchInspectionError(
+                "content_path must be an openable regular non-symlink file"
+            ) from exc
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise WatchInspectionError("content_path must be a regular file")
+            if metadata.st_size > max_artifact_bytes:
+                raise WatchInspectionError("artifact exceeds the preserved-byte limit")
+            with os.fdopen(descriptor, "rb", closefd=False) as handle:
+                body = handle.read(max_artifact_bytes + 1)
+        finally:
+            os.close(descriptor)
     if not body:
         raise WatchInspectionError("artifact bytes must be non-empty")
     if len(body) > max_artifact_bytes:
@@ -382,10 +397,17 @@ def run_watch_inspection(
     verifier: str = DEFAULT_VERIFIER,
     lease_ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
     max_artifact_bytes: int = MAX_ARTIFACT_BYTES,
+    max_artifacts_per_inspection: int = 4,
+    max_total_artifact_bytes: int | None = None,
     max_relationships_per_artifact: int = 100,
+    max_total_relationships: int | None = None,
     max_candidate_count: int | None = None,
 ) -> dict[str, Any]:
     domain = _text("domain", domain, 256)
+    if max_artifacts_per_inspection < 1:
+        raise WatchInspectionError("max_artifacts_per_inspection must be positive")
+    max_total_artifact_bytes = max_total_artifact_bytes or max_artifact_bytes
+    max_total_relationships = max_total_relationships or max_relationships_per_artifact
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise WatchInspectionError("now must be a timezone-aware datetime")
     now = now.astimezone(timezone.utc)
@@ -398,6 +420,7 @@ def run_watch_inspection(
     skipped: list[str] = []
     derived_total = 0
     appended_total = 0
+    artifact_bytes_total = 0
 
     for index, raw_inspection in enumerate(inspections):
         inspection = _object(f"inspection {index}", raw_inspection)
@@ -432,9 +455,14 @@ def run_watch_inspection(
             admitted: dict[str, tuple[ArtifactReceipt, bytes]] = {}
             inspection_receipts: list[ArtifactReceipt] = []
             relationships: list[SourceRelationship] = []
-            for artifact_index, raw_request in enumerate(
-                _list(f"inspection {index} artifacts", inspection.get("artifacts"))
-            ):
+            artifact_requests = _list(
+                f"inspection {index} artifacts", inspection.get("artifacts")
+            )
+            if len(artifact_requests) > max_artifacts_per_inspection:
+                raise WatchInspectionError(
+                    "inspection artifact count exceeds max_artifacts_per_inspection"
+                )
+            for artifact_index, raw_request in enumerate(artifact_requests):
                 request = _object(f"artifact {artifact_index}", raw_request)
                 artifact_url = _text("artifact_url", request.get("artifact_url"))
                 artifact_identity = _identity("artifact_url", artifact_url)
@@ -445,11 +473,17 @@ def run_watch_inspection(
                     request=request,
                     admitted=admitted,
                 )
+                remaining_bytes = max_total_artifact_bytes - artifact_bytes_total
+                if remaining_bytes <= 0:
+                    raise WatchInspectionError(
+                        "inspection cycle exhausted max_total_artifact_bytes"
+                    )
                 payload, body, transport = _fetch_artifact(
                     request,
                     preserve_root=Path(preserve_root),
-                    max_artifact_bytes=max_artifact_bytes,
+                    max_artifact_bytes=min(max_artifact_bytes, remaining_bytes),
                 )
+                artifact_bytes_total += len(body)
                 receipt = ArtifactReceipt(
                     artifact_url=artifact_url,
                     artifact_identity=artifact_identity,
@@ -476,6 +510,10 @@ def run_watch_inspection(
                     raise WatchInspectionError(
                         "artifact relationship count exceeds max_relationships_per_artifact"
                     )
+                if derived_total + len(relationships) + len(derived) > max_total_relationships:
+                    raise WatchInspectionError(
+                        "inspection cycle relationship count exceeds max_total_relationships"
+                    )
                 for relationship in derived:
                     if relationship.domain != domain:
                         raise WatchInspectionError("derived relationship domain mismatch")
@@ -500,18 +538,26 @@ def run_watch_inspection(
                     raise WatchInspectionError(
                         "inspection would exceed max_candidates_per_cycle"
                     )
+            # Persist a deterministic prepared transaction journal and proof
+            # before canonical graph mutation. If mutation or completion is
+            # interrupted, replay reuses the same journal, re-applies edges
+            # idempotently, and finalizes the leased work item.
+            manifest_path = _write_manifest(
+                Path(receipts_root),
+                work.work_id,
+                inspection_receipts,
+                relationships,
+                entry,
+            )
+            proof_path = _write_proof(
+                Path(receipts_root), work.work_id, manifest_path, work, verifier
+            )
             ingested = ingest_relationships(
                 relationships, graph_path=Path(graph_path), discovery_ledger_path=Path(ledger_path)
             )
             derived_total += len(relationships)
             appended_total += ingested["relationships_appended"]
 
-            manifest_path = _write_manifest(
-                Path(receipts_root), work.work_id, inspection_receipts, entry
-            )
-            proof_path = _write_proof(
-                Path(receipts_root), work.work_id, manifest_path, work, verifier
-            )
             engine = DiscoveryEngine(Path(ledger_path), authorized_verifiers=frozenset({verifier}))
             engine.complete_work(
                 work.work_id,
@@ -549,6 +595,7 @@ def run_watch_inspection(
         "already_completed_work_ids": already_completed,
         "skipped_unpromoted_sources": skipped,
         "artifact_receipts": receipts,
+        "artifact_bytes_preserved": artifact_bytes_total,
         "relationships_derived": derived_total,
         "relationships_appended": appended_total,
     }
@@ -558,14 +605,17 @@ def _write_manifest(
     receipts_root: Path,
     work_id: str,
     receipts: list[ArtifactReceipt],
+    relationships: list[SourceRelationship],
     entry: dict[str, Any],
 ) -> Path:
     manifest = {
         "schema_version": SCHEMA_VERSION,
+        "transaction_phase": "prepared",
         "work_id": work_id,
         "candidate_id": entry.get("candidate_id"),
         "watch_canonical_url": entry.get("canonical_url"),
         "artifact_receipts": [item.to_dict() for item in receipts],
+        "intended_relationships": [item.to_dict() for item in relationships],
     }
     path = receipts_root.resolve() / f"inspection-{work_id}.json"
     _atomic_bytes(
