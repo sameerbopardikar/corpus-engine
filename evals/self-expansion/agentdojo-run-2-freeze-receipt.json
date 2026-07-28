@@ -1,0 +1,77 @@
+{
+  "artifact_count": 3,
+  "artifacts": [
+    {
+      "byte_length": 70,
+      "declared_source_sha256": "59adcc15f1c6231f1d8e102c5d731dc678a5ef0900ce5528b5cdc7e059fdaafa",
+      "packet_path": "cycle_a_artifacts[1]",
+      "sha256": "de61c121b907c49b39b470bc0e05116a76a97dec329dc2f3020a692ea4ed18da",
+      "text_field": "text",
+      "url": "https://api.github.com/search/repositories?q=agent%20security%20benchmark"
+    },
+    {
+      "byte_length": 1289,
+      "declared_source_sha256": "48097b3ef93c7d51379927c6ad38d8e008f51d41dba9d3063869da5b06a254e3",
+      "packet_path": "cycle_a_artifacts[0]",
+      "sha256": "598c0ce1fcc190026d03953faf3c3f675f1e759d8de3ffc52c3bc1dad8191d22",
+      "text_field": "text",
+      "url": "https://arxiv.org/abs/2406.13352"
+    },
+    {
+      "byte_length": 3186,
+      "declared_source_sha256": "3e3e23e058e626dffa2dde142675591755a41c9cc0cdc8b2d3f913b3f583c063",
+      "packet_path": "cycle_b_artifacts[0]",
+      "sha256": "e8e39e4541951d211507cf4857894d6c8e95eb2a114df39126c10a71cdb92dfa",
+      "text_field": "text",
+      "url": "https://github.com/ethz-spylab/agentdojo"
+    }
+  ],
+  "leakage_absent": false,
+  "leakage_findings": [
+    {
+      "locations": [
+        "cycle_a_artifacts[0]"
+      ],
+      "term": "adaptive attack"
+    },
+    {
+      "locations": [
+        "cycle_a_artifacts[0]",
+        "cycle_a_artifacts[1]",
+        "cycle_b_artifacts[0]"
+      ],
+      "term": "agentdojo"
+    },
+    {
+      "locations": [
+        "cycle_a_artifacts[0]",
+        "cycle_b_artifacts[0]"
+      ],
+      "term": "prompt injection"
+    },
+    {
+      "locations": [
+        "cycle_a_artifacts[0]"
+      ],
+      "term": "untrusted data"
+    }
+  ],
+  "leaked_terms": [
+    "adaptive attack",
+    "agentdojo",
+    "prompt injection",
+    "untrusted data"
+  ],
+  "packet_byte_length": 6388,
+  "packet_label": "agentdojo-run-2",
+  "packet_sha256": "dadc43dded806081044b73efe7fefaadef95693afc308ce57362de201801ae4e",
+  "scanned_terms": [
+    "adaptive attack",
+    "adaptive indirect-injection robustness evaluation",
+    "agentdojo",
+    "prompt injection",
+    "untrusted data"
+  ],
+  "schema_version": 1,
+  "worker_visible_sha256": "dadc43dded806081044b73efe7fefaadef95693afc308ce57362de201801ae4e"
+}

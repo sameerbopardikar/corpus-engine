@@ -1,0 +1,111 @@
+{
+  "base_commit_at_run": "b207ce850ba0b46a1e4d4dd2f9e0cfc16dd8f51d",
+  "command": "python scripts/corpus_self_expansion_proof.py --config evals/self-expansion/fixtures/two-cycle-proof-config.json --run-root <isolated-run-root>",
+  "cycle_a": {
+    "promoted_watch_urls": [
+      "https://example.org/people/maya-chen"
+    ],
+    "relationship_source": "packet_declared",
+    "rights_assertions": [
+      {
+        "canonical_url": "https://example.org/people/maya-chen",
+        "rights_state": "private_authorized"
+      }
+    ],
+    "watch_work_ids": [
+      "work_eea5a99f4ba1d686059c2621"
+    ]
+  },
+  "cycle_b": {
+    "artifact_receipts": [
+      {
+        "artifact_identity": "https://example.org/people/maya-chen",
+        "artifact_url": "https://example.org/people/maya-chen",
+        "binding": "watch_source_identity",
+        "byte_length": 203,
+        "fetched_at": "2026-07-27T21:30:00Z",
+        "parent_artifact_sha256": null,
+        "schema_version": 1,
+        "sha256": "ce813a12ca1094c76b60dacedac11e97480c5c15bfe0da746af2337c34da9c15",
+        "source_family": "engineering-notes",
+        "source_revision": "frozen-fixture-1",
+        "transport": "fixture-inline",
+        "watch_candidate_id": "cand_56323b1458132638fbdea4c1",
+        "watch_source_url": "https://example.org/people/maya-chen",
+        "work_id": "work_eea5a99f4ba1d686059c2621"
+      },
+      {
+        "artifact_identity": "https://example.org/people/maya-chen/notes/recovery-controller",
+        "artifact_url": "https://example.org/people/maya-chen/notes/recovery-controller",
+        "binding": "parent_artifact_link",
+        "byte_length": 310,
+        "fetched_at": "2026-07-27T21:30:00Z",
+        "parent_artifact_sha256": "ce813a12ca1094c76b60dacedac11e97480c5c15bfe0da746af2337c34da9c15",
+        "schema_version": 1,
+        "sha256": "83bc5b9b2fb552e7bdd182a47f4164ceec36af019f5936296a29ccde56ca70e6",
+        "source_family": "engineering-notes",
+        "source_revision": "frozen-fixture-1",
+        "transport": "fixture-inline",
+        "watch_candidate_id": "cand_56323b1458132638fbdea4c1",
+        "watch_source_url": "https://example.org/people/maya-chen",
+        "work_id": "work_eea5a99f4ba1d686059c2621"
+      }
+    ],
+    "consumed_work_ids": [
+      "work_eea5a99f4ba1d686059c2621"
+    ],
+    "relationships_derived": 1,
+    "relationships_supplied_by_packet": 0,
+    "second_order_candidate_urls": [
+      "https://github.com/example/recovery-controller"
+    ]
+  },
+  "gates": {
+    "candidate_promotion": true,
+    "durable_inspection": true,
+    "leakage_absent": true,
+    "recursive_expansion": true,
+    "rights_preserved": true,
+    "unknown_concept": true
+  },
+  "identical_ignoring_local_preservation_paths": true,
+  "kind": "isolated_exact_two_cycle_proof",
+  "overall_status": "passed",
+  "runs": 2,
+  "schema_version": 2,
+  "shared_production_state_touched": false,
+  "worker_visible_sha256": "57578c851b7a4457c0733402d517e86a5a82e2f84926273f9c19991814edf727",
+  "working_tree_manifest_excluding_this_receipt": {
+    ".hermes/plans/2026-07-28_054513-self-expansion-proof-closure.md": "6321929aa2fbcc7199541aacc4e569a06d66092bc54f3b4a5a6c2f1f40cf0297",
+    "evals/self-expansion/agentdojo-run-2-freeze-receipt.json": "45dc111cb3a30129b736a1b285bdf71a87499336f5efe84104b9d2611bb35ea2",
+    "evals/self-expansion/fixtures/state-feedback-hidden-evaluator-v2.json": "ba8ca3ff04945971c5c181c98243b547bf7778424aa5b88717a1fd30607bd9a5",
+    "evals/self-expansion/fixtures/two-cycle-proof-config.json": "42835da9d53f056c719c67e64d94655f5e60e2efba3875b596780655b18b6406",
+    "evals/self-expansion/run-ledger.md": "b3fe405274863caccf2568ce7c970afde2001480c91e2a1369fcd7a02dde09d5",
+    "evals/self-expansion/scheduled-wrapper-proof-receipt.json": "f3c333545f4b438787317771b55dc26227d7e21800cabf6c255dda6b5e3a4111",
+    "evals/self-expansion/scratchpad-holdout-freeze-receipt.json": "8085bf4ac32c2aa93c96b66a79ee25484957c1af69ae6e0d8553919469a7b28b",
+    "evals/self-expansion/state-feedback-holdout-v2-evaluation.json": "ed9e1f858ef548055460a689f4ce50994518b9a6a0a0900e1096104ef876c47d",
+    "evals/self-expansion/state-feedback-holdout-v2-freeze-receipt.json": "cc6e0b223f753daf452abf9ec1faf9a5e3e65898bbf049fd8bd9ed694da42e2d",
+    "evals/self-expansion/state-feedback-holdout-v2-grounded-evaluation.json": "1077696ae2debbd656aec12c44062122c2b053e42bbd5b8ae2ca2bf983d05099",
+    "evals/self-expansion/state-feedback-holdout-v2-worker-output.json": "46ac64f1800174ccce3eb80b753d302fdd448063e95e0f7c9f1eb5b8153a6c88",
+    "scripts/corpus_candidate_policy.py": "c0dfda2b1c05fa4f1175ffc00e0379df624020bb40149b3e202f6cc401d46966",
+    "scripts/corpus_engine_cycle_v1.sh": "e0ece487a72f1a31a1dab31ebb65bbe2687c73ad391601648765b87632f7ada0",
+    "scripts/corpus_holdout_freeze.py": "71e64f4322f90b889be303c0bd576af0e1f4dc0b0f93a3b5adf1645e225edc0b",
+    "src/corpus_candidate_policy.py": "158d7a8077e3b913b59048152274ec2d8c0ea64e6d4f958ec813a289acd852d5",
+    "src/corpus_entity_identity.py": "020367e1d8659a950e62ad665295b5a63a8236fe567bad40f524e70fbd07ca38",
+    "src/corpus_holdout_freeze.py": "9a425727b658d270ee5c195fb265832a5bdf5d4a2f21c72f405c5d4bfd9eb73b",
+    "src/corpus_recursive_discovery_eval.py": "4b0b2d5257d4773494cab8f31454a0502392eed5e2f35b5a4d2df6669b7bc2f6",
+    "src/corpus_relationship_extraction.py": "3fe1976a8126cf9bb549ccd7469f19ac23cf40df3aaa1ad4b71a2c88980ab41f",
+    "src/corpus_source_graph.py": "c9b2c94e11cc2e27fc1239029b20ac8a9fe286f2e1b0d8fd9897c6de8dba817a",
+    "src/corpus_watch_inspection.py": "0a9ed9644d1c5fe3123cb024a0e20bf52d1b2f79c3377819a96ea8f99e63d1c6",
+    "tests/test_corpus_candidate_policy.py": "0a65c4a9f341993c35f230bf48e9808c28fa9aefcebb19d035e985f02c338430",
+    "tests/test_corpus_candidate_policy_cli.py": "89de5da950b963d497c5943ccf85713a3fb7bc3c14301c460b99f88dfcf7c07a",
+    "tests/test_corpus_entity_identity.py": "4bf9e45300b8af4de1c4b58ba2f0c992a7ce9d51b81d69d8e571ab60e408f1c6",
+    "tests/test_corpus_holdout_freeze.py": "773f132c96461c65c0805ad32d582ecf0ff3824bfc9f56d5ce47f3ebd00b1e6a",
+    "tests/test_corpus_recursive_discovery_eval.py": "beab89b32bd4ab29836c7c41e50b69a91c5256d1d86616a32326623afafed7a8",
+    "tests/test_corpus_relationship_extraction.py": "ad7d5489758167979c150925a3a2417eb7ce45b8836404138e24c9bce1e5d0d5",
+    "tests/test_corpus_source_graph.py": "82353bcc887b08c3b7d95f276ba38afbd976876bd3a3a399c9b55fc08debdcfb",
+    "tests/test_corpus_watch_inspection.py": "8fb58f0df643d3b324cd6739bd15f20b5f44e4aae7ad8c9e10ba503ff12f339a",
+    "tests/test_engine_cycle_wrapper.py": "d53bb337b06f5e68d47ab63896352def210816e26f3da6e81486e43c8d2d6e39"
+  },
+  "working_tree_manifest_sha256": "81ec941b0c2a2c8d50784ad751e7ce71d8af056273b2fe843f940ee6b4dc03c1"
+}

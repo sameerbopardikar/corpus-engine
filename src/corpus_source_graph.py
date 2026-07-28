@@ -23,6 +23,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from corpus_discovery import DiscoveryEngine
 from corpus_engine_models import CandidateObservation, ENTITY_TYPES
+from corpus_entity_identity import EntityIdentityError, canonical_entity_identity
 
 SCHEMA_VERSION = 1
 RELATIONSHIP_TYPES = frozenset(
@@ -76,6 +77,15 @@ def _url(name: str, value: Any) -> str:
     return urlunsplit((parsed.scheme.lower(), netloc, path, parsed.query, ""))
 
 
+def _entity_url(name: str, value: Any) -> str:
+    """Normalize an entity URL through the one canonical identity resolver."""
+    value = _text(name, value)
+    try:
+        return canonical_entity_identity(value)
+    except EntityIdentityError as exc:
+        raise SourceGraphContractError(f"{name} is not a resolvable entity URL: {exc}") from exc
+
+
 def _aware_iso(name: str, value: Any) -> str:
     value = _text(name, value, 64)
     try:
@@ -121,7 +131,7 @@ class SourceRelationship:
         if entity_type not in ENTITY_TYPES:
             raise SourceGraphContractError(f"unsupported entity_type: {entity_type!r}")
         object.__setattr__(self, "entity_type", entity_type)
-        object.__setattr__(self, "canonical_url", _url("canonical_url", self.canonical_url))
+        object.__setattr__(self, "canonical_url", _entity_url("canonical_url", self.canonical_url))
         object.__setattr__(self, "title", _text("title", self.title, 1024))
         object.__setattr__(self, "discovered_from_url", _url("discovered_from_url", self.discovered_from_url))
         object.__setattr__(self, "evidence_pointer", _url("evidence_pointer", self.evidence_pointer))
@@ -211,9 +221,22 @@ def _append_new(path: Path, relationships: list[SourceRelationship]) -> int:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         existing = _read_graph(path)
         known = {item.relation_id for item in existing}
-        novel = [item for item in relationships if item.relation_id not in known]
+        # Deduplicate the incoming batch itself before opening the append
+        # descriptor. Two identical relationships in one call are one edge;
+        # appending both would satisfy this call and then permanently break
+        # every later read of the durable graph.
+        novel: list[SourceRelationship] = []
+        batch_ids: set[str] = set()
+        for item in relationships:
+            if item.relation_id in known or item.relation_id in batch_ids:
+                continue
+            batch_ids.add(item.relation_id)
+            novel.append(item)
         if not novel:
             return 0
+        projected = known | batch_ids
+        if len(projected) != len(known) + len(novel):
+            raise SourceGraphContractError("projected source graph would contain duplicate relation IDs")
         flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
         fd = os.open(path, flags, 0o600)
         try:
@@ -249,11 +272,26 @@ def relationship_to_observation(relationship: SourceRelationship) -> CandidateOb
 
 
 def reconcile_source_graph(graph_path: Path, discovery_ledger_path: Path) -> dict[str, int]:
+    """Project every durable graph edge into the shared candidate ledger.
+
+    Reconciliation is a rights-neutral, replayable recovery step: it may create
+    a new ``rights_unclear`` candidate, but observing an entity again never
+    restates the rights another authorized resolver already granted. That keeps
+    graph append plus projection recoverable after an interruption instead of
+    wedging on a candidate whose rights were legitimately upgraded.
+    """
     relationships = _read_graph(Path(graph_path))
     engine = DiscoveryEngine(Path(discovery_ledger_path))
     before = len(engine.candidates)
     for relationship in relationships:
-        engine.observe(relationship_to_observation(relationship), rights_state="rights_unclear")
+        observation = relationship_to_observation(relationship)
+        known = observation.candidate_key in engine.candidates
+        try:
+            engine.observe(observation, rights_state="unknown" if known else "rights_unclear")
+        except ValueError:
+            # The candidate was created concurrently between replay and append;
+            # re-observe rights-neutrally rather than failing the projection.
+            engine.observe(observation, rights_state="unknown")
     return {
         "relationships": len(relationships),
         "candidates_before": before,
@@ -284,17 +322,21 @@ def ingest_relationships(
 
 
 def canonical_candidate_url(url: str) -> tuple[str, str]:
-    """Classify and canonicalize a linked candidate without knowing its terminology."""
-    normalized = _url("candidate URL", url)
+    """Classify a linked candidate and resolve it to its canonical identity.
+
+    Classification is the only thing decided here; identity comes from the one
+    shared resolver so a linked URL, a seed registry entry, and a rediscovered
+    watch source all compare as the same entity.
+    """
+    _url("candidate URL", url)
+    normalized = _entity_url("candidate URL", url)
     parsed = urlsplit(normalized)
     host = parsed.hostname or ""
     parts = [part for part in parsed.path.split("/") if part]
-    if host in {"github.com", "www.github.com"} and len(parts) >= 2:
-        repository = re.sub(r"\.git$", "", parts[1])
-        return "repository", f"https://github.com/{parts[0]}/{repository}"
-    if host in {"arxiv.org", "www.arxiv.org"} and len(parts) >= 2 and parts[0] in {"abs", "pdf", "html"}:
-        paper_id = parts[1].removesuffix(".pdf")
-        return "paper", f"https://arxiv.org/abs/{paper_id}"
+    if host == "github.com" and len(parts) >= 2:
+        return "repository", normalized
+    if host == "arxiv.org" and len(parts) >= 2 and parts[0] == "abs":
+        return "paper", normalized
     return "document", normalized
 
 

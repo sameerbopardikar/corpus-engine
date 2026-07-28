@@ -1,0 +1,19 @@
+{
+  "global_cycle_status": "planned",
+  "legacy_shims_disabled": true,
+  "mode": "isolated-dry-global-cycle-plus-opt-in-self-expansion-proof",
+  "production_cron_modified": false,
+  "proof_receipt_bytes": 11013,
+  "proof_receipt_sha256": "9741a3bd166ac966b50ec081706f31e135a38395a3e5ffc2cae3548de1a564bf",
+  "schema_version": 1,
+  "self_expansion_gates": {
+    "candidate_promotion": true,
+    "durable_inspection": true,
+    "leakage_absent": true,
+    "recursive_expansion": true,
+    "rights_preserved": true,
+    "unknown_concept": true
+  },
+  "self_expansion_status": "passed",
+  "wrapper": "scripts/corpus_engine_cycle_v1.sh"
+}

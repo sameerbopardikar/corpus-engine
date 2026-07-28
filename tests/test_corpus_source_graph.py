@@ -12,6 +12,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from corpus_discovery import DiscoveryEngine
+from corpus_engine_models import CandidateObservation
 from corpus_source_graph import (
     SourceGraphContractError,
     ingest_relationships,
@@ -156,6 +157,199 @@ class SourceGraphExpansionTests(unittest.TestCase):
             )
         self.assertFalse(self.graph.exists())
         self.assertFalse(self.discovery.exists())
+
+    def test_same_batch_duplicate_relationships_cannot_corrupt_the_graph(self):
+        relationship = self.relation()
+        result = ingest_relationships(
+            [relationship, dict(relationship), relationship],
+            graph_path=self.graph,
+            discovery_ledger_path=self.discovery,
+        )
+        self.assertEqual(result["relationships_appended"], 1)
+        lines = [line for line in self.graph.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertEqual(len(lines), 1)
+        relation_ids = [json.loads(line)["relation_id"] for line in lines]
+        self.assertEqual(len(relation_ids), len(set(relation_ids)))
+        # The durable bytes stay readable, so a follow-up cycle still converges.
+        again = ingest_relationships(
+            [relationship], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        self.assertEqual(again["relationships_appended"], 0)
+        self.assertEqual(again["relationships"], 1)
+
+    def test_duplicate_batch_dedup_preserves_every_distinct_relationship(self):
+        first = self.relation()
+        second = self.relation(
+            source_family="conference",
+            relationship_type="speaker_at",
+            discovered_from_url="https://example.org/events/agent-systems-2026",
+            evidence_pointer="https://example.org/events/agent-systems-2026#schedule",
+        )
+        result = ingest_relationships(
+            [first, second, dict(first), dict(second)],
+            graph_path=self.graph,
+            discovery_ledger_path=self.discovery,
+        )
+        self.assertEqual(result["relationships_appended"], 2)
+        self.assertEqual(result["relationships"], 2)
+
+    def test_tracking_aliases_of_one_entity_converge_on_one_durable_candidate(self):
+        """False novelty must be impossible in the ledger, not just in reports."""
+        canonical = "https://github.com/example/recursive-engine"
+        result = ingest_relationships(
+            [
+                self.relation(
+                    canonical_url=canonical,
+                    discovered_from_url="https://x.com/builder/status/1",
+                    evidence_pointer="https://x.com/builder/status/1",
+                ),
+                self.relation(
+                    canonical_url=f"{canonical}?utm_source=cycle-b",
+                    discovered_from_url="https://x.com/builder/status/2",
+                    evidence_pointer="https://x.com/builder/status/2",
+                ),
+                self.relation(
+                    canonical_url=f"{canonical}/",
+                    source_family="conference",
+                    discovered_from_url="https://example.org/events/agent-systems-2026",
+                    evidence_pointer="https://example.org/events/agent-systems-2026#schedule",
+                ),
+            ],
+            graph_path=self.graph,
+            discovery_ledger_path=self.discovery,
+        )
+        self.assertEqual(result["candidates_added"], 1)
+        engine = DiscoveryEngine(self.discovery)
+        self.assertEqual(
+            [record.canonical_url for record in engine.candidates.values()], [canonical]
+        )
+        # Aliases corroborate the one entity instead of splitting its evidence.
+        self.assertEqual(next(iter(engine.candidates.values())).occurrences, 3)
+
+    def test_distinct_entities_still_remain_distinct_candidates(self):
+        result = ingest_relationships(
+            [
+                self.relation(canonical_url="https://github.com/example/one"),
+                self.relation(
+                    canonical_url="https://github.com/example/two",
+                    discovered_from_url="https://example.com/podcast/episode-8",
+                    evidence_pointer="https://example.com/podcast/episode-8#transcript",
+                ),
+            ],
+            graph_path=self.graph,
+            discovery_ledger_path=self.discovery,
+        )
+        self.assertEqual(result["candidates_added"], 2)
+
+    def test_observation_of_an_existing_candidate_preserves_upgraded_rights(self):
+        relationship = self.relation()
+        ingest_relationships(
+            [relationship], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        engine = DiscoveryEngine(self.discovery)
+        candidate_id = next(iter(engine.candidates))
+        upgraded = _upgrade_rights(self.discovery, candidate_id, "public_rights_clear")
+        self.assertEqual(upgraded, "public_rights_clear")
+
+        # A second, genuinely new observation of the same candidate must not
+        # attempt to reset the rights an authorized resolver already granted.
+        second = self.relation(
+            source_family="conference",
+            relationship_type="speaker_at",
+            discovered_from_url="https://example.org/events/agent-systems-2026",
+            evidence_pointer="https://example.org/events/agent-systems-2026#schedule",
+        )
+        result = ingest_relationships(
+            [second], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        self.assertEqual(result["relationships_appended"], 1)
+        engine = DiscoveryEngine(self.discovery)
+        self.assertEqual(engine.candidates[candidate_id].rights_state, "public_rights_clear")
+
+    def test_observation_still_cannot_grant_rights_to_a_new_candidate(self):
+        ingest_relationships(
+            [self.relation()], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        engine = DiscoveryEngine(self.discovery)
+        self.assertTrue(
+            all(record.rights_state == "rights_unclear" for record in engine.candidates.values())
+        )
+
+    def test_graph_to_ledger_projection_recovers_after_an_interrupted_run(self):
+        relationship = self.relation()
+        # Simulate a crash after the durable graph append but before projection:
+        # only the graph bytes exist.
+        from corpus_source_graph import SourceRelationship, _append_new, reconcile_source_graph
+
+        appended = _append_new(self.graph, [SourceRelationship.from_dict(relationship)])
+        self.assertEqual(appended, 1)
+        self.assertFalse(self.discovery.exists())
+
+        recovered = reconcile_source_graph(self.graph, self.discovery)
+        self.assertEqual(recovered["candidates_added"], 1)
+        # Reconciliation is replayable: a second pass adds nothing and does not raise.
+        ledger_before = self.discovery.read_bytes()
+        again = reconcile_source_graph(self.graph, self.discovery)
+        self.assertEqual(again["candidates_added"], 0)
+        self.assertEqual(self.discovery.read_bytes(), ledger_before)
+
+    def test_rights_upgraded_candidate_survives_graph_to_ledger_reconciliation(self):
+        from corpus_source_graph import reconcile_source_graph
+
+        ingest_relationships(
+            [self.relation()], graph_path=self.graph, discovery_ledger_path=self.discovery
+        )
+        candidate_id = next(iter(DiscoveryEngine(self.discovery).candidates))
+        _upgrade_rights(self.discovery, candidate_id, "public_rights_clear")
+        result = reconcile_source_graph(self.graph, self.discovery)
+        self.assertEqual(result["candidates_added"], 0)
+        engine = DiscoveryEngine(self.discovery)
+        self.assertEqual(engine.candidates[candidate_id].rights_state, "public_rights_clear")
+
+
+def _upgrade_rights(ledger_path: Path, candidate_id: str, rights_state: str) -> str:
+    """Record an authorized rights upgrade the way a rights resolver would."""
+    engine = DiscoveryEngine(ledger_path)
+    record = engine.candidates[candidate_id]
+    engine.ledger.append(
+        "candidate_observed",
+        {
+            "observation": {
+                **CandidateObservation.create(
+                    domain=record.domain,
+                    entity_type=record.entity_type,
+                    canonical_url=record.canonical_url,
+                    discovery_source="rights-resolver:test",
+                    evidence_pointer=record.evidence_pointer,
+                    evidence_lane=record.evidence_lane,
+                    topics=record.topics,
+                    observed_at=record.last_seen_at,
+                ).to_dict()
+            },
+            "score_components": dict(record.score_components),
+            "rationale": record.rationale,
+            "rights_state": rights_state,
+        },
+    )
+    # The first observation event for a candidate carries its rights state, so
+    # rebuild the ledger with the upgraded value replayed from the start.
+    events = engine.ledger.read_events()
+    rewritten = []
+    for event in events:
+        if (
+            event["event_type"] == "candidate_observed"
+            and event["payload"]["observation"]["canonical_url"] == record.canonical_url
+        ):
+            event = {**event, "payload": {**event["payload"], "rights_state": rights_state}}
+        rewritten.append(event)
+    ledger_path.write_text(
+        "".join(
+            json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for event in rewritten
+        ),
+        encoding="utf-8",
+    )
+    return DiscoveryEngine(ledger_path).candidates[candidate_id].rights_state
 
 
 if __name__ == "__main__":

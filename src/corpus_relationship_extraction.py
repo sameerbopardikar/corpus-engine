@@ -9,10 +9,12 @@ not grant rights, promote candidates, or mutate doctrine.
 from __future__ import annotations
 
 import hashlib
+import re
 from html.parser import HTMLParser
 from typing import Any, Iterable
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
+from corpus_entity_identity import EntityIdentityError, canonical_entity_identity
 from corpus_source_graph import (
     SourceGraphContractError,
     SourceRelationship,
@@ -88,20 +90,105 @@ def extract_x_relationships(
         raise RelationshipExtractionError(str(exc)) from exc
 
 
+_SEMANTIC_CLAIM_FIELDS = frozenset(
+    {
+        "relationship_type",
+        "entity_type",
+        "canonical_url",
+        "title",
+        "entity_mention",
+        "relation_mention",
+        "evidence_quote",
+        "evidence_span",
+    }
+)
+
+
+def _normalize_mention(value: str) -> str:
+    return " ".join(value.split()).casefold()
+
+
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
+
+
+def _span_binds_canonical_target(quote: str, canonical_url: str, entity_mention: str) -> bool:
+    """Require the span to identify the same entity as the claimed locator.
+
+    When a span contains locators, at least one must canonicalize to the claimed
+    target. A different URL plus a caller-controlled matching title must never
+    authorize target substitution. For natural-language spans without a URL,
+    the terminal locator slug must exactly name the normalized entity mention;
+    structured adapters remain the preferred route for looser entity resolution.
+    """
+    try:
+        target = canonical_entity_identity(canonical_url)
+    except EntityIdentityError as exc:
+        raise RelationshipExtractionError(f"canonical_url is invalid: {exc}") from exc
+    locators = []
+    for raw in _URL_IN_TEXT.findall(quote):
+        candidate = raw.rstrip(".,;:!?")
+        try:
+            locators.append(canonical_entity_identity(candidate))
+        except EntityIdentityError:
+            continue
+    if locators:
+        return target in locators
+    path_parts = [part for part in urlsplit(target).path.split("/") if part]
+    if not path_parts:
+        return False
+    slug = unquote(path_parts[-1]).replace("-", " ").replace("_", " ")
+    return _normalize_mention(slug) == _normalize_mention(entity_mention)
+
+
+def _validated_span(value: Any, artifact_text: str, quote: str) -> tuple[int, int]:
+    if (
+        not isinstance(value, (list, tuple))
+        or len(value) != 2
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in value)
+    ):
+        raise RelationshipExtractionError("evidence_span must be a [start, end] integer pair")
+    start, end = int(value[0]), int(value[1])
+    if not 0 <= start < end <= len(artifact_text):
+        raise RelationshipExtractionError("evidence_span is outside the preserved artifact")
+    if artifact_text[start:end] != quote:
+        raise RelationshipExtractionError(
+            "evidence_span does not contain the exact quoted artifact bytes"
+        )
+    return start, end
+
+
 def extract_semantic_relationships(
     *,
     source_family: str,
     artifact_url: str,
     artifact_text: str,
+    artifact_sha256: str,
     claims: Iterable[dict[str, Any]],
     domain: str,
     observed_at: str,
     evidence_lane: str,
     topics: Iterable[str],
 ) -> list[SourceRelationship]:
+    """Admit proposed semantic relationships only against preserved bytes.
+
+    A claim survives when the preserved artifact still hashes to the declared
+    digest, the declared span holds the exact quote, the span names the claimed
+    entity, and the span also expresses the relation. An exact sentence taken
+    from somewhere else in the artifact can therefore no longer be reused to
+    ground an entity it never mentions or a relation it never states.
+    """
     source_family = _text("source_family", source_family, 256)
     artifact_url = _text("artifact_url", artifact_url, 4096)
-    artifact_text = _text("artifact_text", artifact_text)
+    if not isinstance(artifact_text, str) or not artifact_text.strip():
+        raise RelationshipExtractionError("artifact_text must be non-blank text")
+    if len(artifact_text) > 4_000_000:
+        raise RelationshipExtractionError("artifact_text exceeds 4000000 characters")
+    artifact_sha256 = _text("artifact_sha256", artifact_sha256, 64)
+    actual_digest = hashlib.sha256(artifact_text.encode("utf-8")).hexdigest()
+    if artifact_sha256.lower() != actual_digest:
+        raise RelationshipExtractionError(
+            "preserved artifact digest does not match the declared artifact_sha256"
+        )
     common = _common(
         domain=domain, observed_at=observed_at, evidence_lane=evidence_lane, topics=topics
     )
@@ -109,11 +196,8 @@ def extract_semantic_relationships(
     for raw_claim in claims:
         if not isinstance(raw_claim, dict):
             raise RelationshipExtractionError("semantic claim must be an object")
-        expected = {
-            "relationship_type", "entity_type", "canonical_url", "title", "evidence_quote"
-        }
-        unknown = set(raw_claim) - expected
-        missing = expected - set(raw_claim)
+        unknown = set(raw_claim) - _SEMANTIC_CLAIM_FIELDS
+        missing = _SEMANTIC_CLAIM_FIELDS - set(raw_claim)
         if unknown or missing:
             raise RelationshipExtractionError(
                 f"semantic claim fields invalid; missing={sorted(missing)} unknown={sorted(unknown)}"
@@ -121,9 +205,40 @@ def extract_semantic_relationships(
         quote = _text("evidence_quote", raw_claim["evidence_quote"], 10_000)
         if quote not in artifact_text:
             raise RelationshipExtractionError("semantic claim quote is not present in artifact")
-        quote_digest = hashlib.sha256(quote.encode("utf-8")).hexdigest()
+        start, end = _validated_span(raw_claim["evidence_span"], artifact_text, quote)
+        span_text = _normalize_mention(quote)
+        entity_mention = _normalize_mention(_text("entity_mention", raw_claim["entity_mention"], 1024))
+        title = _normalize_mention(_text("title", raw_claim["title"], 1024))
+        if entity_mention not in span_text:
+            raise RelationshipExtractionError(
+                "claimed entity mention does not appear in the validated span"
+            )
+        if entity_mention != title:
+            raise RelationshipExtractionError(
+                "claimed entity mention does not match the claimed entity title"
+            )
+        if not _span_binds_canonical_target(
+            quote, _text("canonical_url", raw_claim["canonical_url"], 4096), raw_claim["entity_mention"]
+        ):
+            raise RelationshipExtractionError(
+                "validated span does not bind the claimed canonical target"
+            )
+        relation_mention = _normalize_mention(
+            _text("relation_mention", raw_claim["relation_mention"], 1024)
+        )
+        if relation_mention not in span_text:
+            raise RelationshipExtractionError(
+                "claimed relation mention does not appear in the validated span"
+            )
+        if relation_mention == entity_mention:
+            raise RelationshipExtractionError(
+                "claimed relation mention must bind the relation, not repeat the entity"
+            )
         separator = "&" if urlsplit(artifact_url).query else "?"
-        evidence_pointer = f"{artifact_url}{separator}evidence_sha256={quote_digest}"
+        evidence_pointer = (
+            f"{artifact_url}{separator}artifact_sha256={actual_digest}"
+            f"&evidence_span={start}-{end}"
+        )
         relationships.append(
             _make(
                 source_family=source_family,

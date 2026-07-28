@@ -1,0 +1,164 @@
+{
+  "cycle_a": {
+    "relationships": [
+      {
+        "canonical_url": "https://example.org/people/maya-chen",
+        "discovered_from_url": "https://example.com/podcast/seed-12",
+        "domain": "agentic-engineering",
+        "entity_type": "creator",
+        "evidence_lane": "practitioner-implementation",
+        "evidence_pointer": "https://example.com/podcast/seed-12?span=1",
+        "observed_at": "2026-07-20T12:00:00Z",
+        "relation_id": "rel_87e292702fcfe4c609aa3638",
+        "relationship_type": "guest_of",
+        "schema_version": 1,
+        "source_family": "podcast",
+        "title": "Maya Chen",
+        "topics": [
+          "reliability",
+          "tool-use",
+          "verification"
+        ]
+      },
+      {
+        "canonical_url": "https://example.org/people/maya-chen",
+        "discovered_from_url": "https://events.example.org/reliable-agents",
+        "domain": "agentic-engineering",
+        "entity_type": "creator",
+        "evidence_lane": "production-reliability",
+        "evidence_pointer": "https://events.example.org/reliable-agents?talk=4",
+        "observed_at": "2026-07-21T12:00:00Z",
+        "relation_id": "rel_635f091aeebbedc916a70035",
+        "relationship_type": "speaker_at",
+        "schema_version": 1,
+        "source_family": "conference",
+        "title": "Maya Chen",
+        "topics": [
+          "reliability",
+          "tool-use",
+          "verification"
+        ]
+      }
+    ],
+    "rights_assertions": [
+      {
+        "canonical_url": "https://example.org/people/maya-chen",
+        "rights_state": "private_authorized"
+      }
+    ]
+  },
+  "cycle_b": {
+    "inspections": [
+      {
+        "artifacts": [
+          {
+            "artifact_url": "https://example.org/people/maya-chen",
+            "content": "# Maya Chen\n\nMaya Chen builds control planes for long-running automation and writes about\noperating them in production.\n\nEngineering notes: https://example.org/people/maya-chen/notes/recovery-controller\n",
+            "content_sha256": "ce813a12ca1094c76b60dacedac11e97480c5c15bfe0da746af2337c34da9c15",
+            "evidence_lane": "production-reliability",
+            "extraction": {
+              "claims": [],
+              "kind": "semantic"
+            },
+            "fetched_at": "2026-07-27T21:30:00Z",
+            "observed_at": "2026-07-25T12:00:00Z",
+            "source_family": "engineering-notes",
+            "source_revision": "frozen-fixture-1",
+            "topics": [
+              "reliability",
+              "tool-use",
+              "verification"
+            ]
+          },
+          {
+            "artifact_url": "https://example.org/people/maya-chen/notes/recovery-controller",
+            "content": "# Recovery controller notes\n\nEvery external side effect stays unresolved until a deterministic readback\nconfirms the resulting state, so the controller re-reads what it just wrote\nbefore it advances.\n\nThe controller lives at https://github.com/example/recovery-controller and is exercised by a replay harness.\n",
+            "content_sha256": "83bc5b9b2fb552e7bdd182a47f4164ceec36af019f5936296a29ccde56ca70e6",
+            "evidence_lane": "production-reliability",
+            "extraction": {
+              "claims": [
+                {
+                  "canonical_url": "https://github.com/example/recovery-controller",
+                  "entity_mention": "https://github.com/example/recovery-controller",
+                  "entity_type": "repository",
+                  "evidence_quote": "The controller lives at https://github.com/example/recovery-controller and is exercised by a replay harness.",
+                  "evidence_span": [
+                    201,
+                    309
+                  ],
+                  "relation_mention": "lives at",
+                  "relationship_type": "linked_primary_source",
+                  "title": "https://github.com/example/recovery-controller"
+                }
+              ],
+              "kind": "semantic"
+            },
+            "fetched_at": "2026-07-27T21:30:00Z",
+            "observed_at": "2026-07-25T12:00:00Z",
+            "parent_artifact_url": "https://example.org/people/maya-chen",
+            "source_family": "engineering-notes",
+            "source_revision": "frozen-fixture-1",
+            "topics": [
+              "reliability",
+              "tool-use",
+              "verification"
+            ]
+          }
+        ],
+        "watch_source_url": "https://example.org/people/maya-chen"
+      }
+    ]
+  },
+  "domain": "agentic-engineering",
+  "evaluated_at": "2026-07-27T22:00:00Z",
+  "hidden_evaluator": {
+    "forbidden_seed_terms": [
+      "outcome-unknown",
+      "ambiguous commit protocol"
+    ],
+    "required_mechanisms": [
+      "external side effects",
+      "unresolved",
+      "readback"
+    ],
+    "target_label": "outcome-unknown recovery"
+  },
+  "provenance": {
+    "kind": "mechanism_proof",
+    "note": "Frozen synthetic packet that exercises the exact two-cycle mechanism: persisted Cycle-A artifact evidence -> relationship -> candidate -> promotion -> durable daily inspect work item -> leased watch inspection -> fetched Cycle-B artifact bytes -> production extractor -> second-order candidate and span-grounded concept. It is a proof of the path, not a discovery claim."
+  },
+  "schema_version": 2,
+  "seed_packet": {
+    "ontology": [
+      "tool use",
+      "reliability",
+      "verification"
+    ],
+    "queries": [
+      "agent reliability",
+      "tool verification"
+    ],
+    "registry": [
+      "https://example.com/podcast/seed"
+    ],
+    "worker_prompt": "Identify recurring engineering mechanisms and cite exact artifact spans."
+  },
+  "worker_output": {
+    "concept_candidates": [
+      {
+        "evidence": [
+          {
+            "artifact_sha256": "83bc5b9b2fb552e7bdd182a47f4164ceec36af019f5936296a29ccde56ca70e6",
+            "artifact_url": "https://example.org/people/maya-chen/notes/recovery-controller",
+            "quote": "Every external side effect stays unresolved until a deterministic readback\nconfirms the resulting state, so the controller re-reads what it just wrote\nbefore it advances.",
+            "span": [
+              29,
+              199
+            ]
+          }
+        ],
+        "statement": "External side effects remain unresolved until a deterministic readback confirms the resulting state, so the controller must re-read what it wrote before advancing."
+      }
+    ]
+  }
+}

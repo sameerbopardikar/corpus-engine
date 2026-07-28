@@ -30,7 +30,7 @@ class WrapperExecuteModeTests(unittest.TestCase):
         shim.chmod(shim.stat().st_mode | stat.S_IEXEC)
         self.bindir = bindir
 
-    def _run(self, execute_env=None):
+    def _run(self, execute_env=None, *, extra_env=None):
         env = dict(os.environ)
         env["PATH"] = f"{self.bindir}:{env['PATH']}"
         env["CORPUS_CONFIG_DIR"] = str(ROOT / "config" / "domains")
@@ -38,6 +38,8 @@ class WrapperExecuteModeTests(unittest.TestCase):
         env["CORPUS_CORPORA_ROOT"] = str(self.tmp / "corpora")
         if execute_env is not None:
             env["CORPUS_ACQUISITION_EXECUTE"] = execute_env
+        if extra_env:
+            env.update(extra_env)
         proc = subprocess.run(
             ["bash", str(WRAPPER)], env=env, capture_output=True, text=True, timeout=60
         )
@@ -56,6 +58,39 @@ class WrapperExecuteModeTests(unittest.TestCase):
         recorded = self._run(execute_env="0")
         self.assertNotIn("--execute", recorded)
         self.assertNotIn("--corpora-root", recorded)
+
+    def test_opt_in_self_expansion_proof_runs_through_the_recurring_wrapper(self):
+        proof_root = self.tmp / "self-expansion-proof"
+        proof_config = ROOT / "evals" / "self-expansion" / "fixtures" / "two-cycle-proof-config.json"
+        recorded = self._run(
+            execute_env="0",
+            extra_env={
+                "CORPUS_LEGACY_SHIMS": "0",
+                "CORPUS_SELF_EXPANSION_PROOF_CONFIG": str(proof_config),
+                "CORPUS_SELF_EXPANSION_PROOF_ROOT": str(proof_root),
+            },
+        )
+        self.assertIn("scripts/corpus_self_expansion_proof.py", recorded)
+        self.assertIn(f"--config {proof_config}", recorded)
+        self.assertIn(f"--run-root {proof_root}", recorded)
+        self.assertNotIn("corpus-intake", recorded)
+        self.assertNotIn("agentic-engineering-shadow", recorded)
+
+    def test_self_expansion_wrapper_configuration_is_all_or_nothing(self):
+        env = dict(os.environ)
+        env["PATH"] = f"{self.bindir}:{env['PATH']}"
+        env["CORPUS_CONFIG_DIR"] = str(ROOT / "config" / "domains")
+        env["CORPUS_BUDGET_PATH"] = str(self.tmp / "budget.json")
+        env["CORPUS_CORPORA_ROOT"] = str(self.tmp / "corpora")
+        env["CORPUS_ACQUISITION_EXECUTE"] = "0"
+        env["CORPUS_SELF_EXPANSION_PROOF_CONFIG"] = str(
+            ROOT / "evals" / "self-expansion" / "fixtures" / "two-cycle-proof-config.json"
+        )
+        proc = subprocess.run(
+            ["bash", str(WRAPPER)], env=env, capture_output=True, text=True, timeout=60
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("must be set together", proc.stderr)
 
     def test_script_passes_bash_syntax_check(self):
         proc = subprocess.run(["bash", "-n", str(WRAPPER)], capture_output=True, text=True)

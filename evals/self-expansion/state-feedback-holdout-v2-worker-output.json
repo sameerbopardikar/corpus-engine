@@ -1,0 +1,39 @@
+{
+  "concept_candidates": [
+    {
+      "statement": "Engineering work outlives a single conversational turn, but an assistant cannot revise a shared mental model if relevant state remains only in transient dialogue. Cycle A externalizes selected working state into an active-memory JSON/file store and reloads it into later prompts (including as an XML block); Cycle B generalizes that store into a continuously updated scratchpad containing requests, commands, outputs, and human edits, then injects the whole scratchpad into the next prompt. State therefore flows from human or tool output to a persistent editable artifact, from that artifact into model context, and from the next execution back into the artifact. This gives later actions continuity with discoveries and corrections made during the task instead of forcing the user to restate them.",
+      "evidence_pointers": [
+        "https://www.youtube.com/watch?v=090oR--s__8",
+        "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+      ]
+    },
+    {
+      "statement": "Free-form speech is useful for expressing intent but cannot by itself safely perform concrete engineering operations. The assistant acts as a compilation and orchestration boundary: it combines the natural-language request with loaded context and an explicit command/tool inventory, reasons over that bundle, emits structured queries or executable commands, and dispatches those operations to files, databases, or runtimes. Cycle A demonstrates this flow from spoken intent through structured outputs and an assistant orchestration layer to SQL, CSV, Python, and file operations; Cycle B makes the prompt assembly explicit by inserting command definitions, context files, scratchpad state, and the current request before generating one execution statement. The consequence is that the human can steer at task level while the system translates that intent into repeatable machine actions rather than merely answering conversationally.",
+      "evidence_pointers": [
+        "https://www.youtube.com/watch?v=090oR--s__8",
+        "https://www.youtube.com/watch?v=4SnvMieJiuw",
+        "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+      ]
+    },
+    {
+      "statement": "Tool use is unreliable when execution results disappear or success is assumed without inspection. Across the artifacts, intermediate products and execution traces are materialized as files or scratchpad blocks, inspected, transformed, deleted, reset, or used to issue a narrower retry: source material becomes cleaned Markdown, then model context, runnable code, and an executed result; database schemas become queries, CSVs, and charts; and in Cycle B generated create/delete commands append their outcomes to the scratchpad, exposing partial failure so the user can correct the identifier format and rerun only the failed operation. The state flow closes the loop from plan to execution to observable result to repair, making failures recoverable and multi-step work composable instead of treating the first generation as final.",
+      "evidence_pointers": [
+        "https://www.youtube.com/watch?v=090oR--s__8",
+        "https://www.youtube.com/watch?v=4SnvMieJiuw",
+        "https://www.youtube.com/watch?v=zoBwIi4ZiTA"
+      ]
+    }
+  ],
+  "project_lineage": [
+    {
+      "from_url": "https://www.youtube.com/watch?v=090oR--s__8",
+      "to_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "relationship": "continuation"
+    },
+    {
+      "from_url": "https://www.youtube.com/watch?v=4SnvMieJiuw",
+      "to_url": "https://www.youtube.com/watch?v=zoBwIi4ZiTA",
+      "relationship": "continuation"
+    }
+  ]
+}
