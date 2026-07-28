@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -14,7 +13,13 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from corpus_x_radar import XRadarLease, commit_failure, commit_success, lease_next
+from corpus_x_radar import (
+    XRadarCycleFinalized,
+    XRadarLease,
+    commit_failure,
+    commit_success,
+    lease_next,
+)
 
 
 def now_iso() -> str:
@@ -59,7 +64,11 @@ def main(argv: list[str] | None = None) -> int:
     queries = load_queries(Path(args.registry), args.source_id)
     state = Path(args.state)
     if args.command == "lease":
-        lease = lease_next(queries, state, cycle_id=args.cycle_id, leased_at=now_iso())
+        try:
+            lease = lease_next(queries, state, cycle_id=args.cycle_id, leased_at=now_iso())
+        except XRadarCycleFinalized as exc:
+            print(json.dumps({"status": "finalized", "cycle_id": args.cycle_id, "message": str(exc)}))
+            return 3
         encoded = json.dumps(lease.to_dict(), indent=2, sort_keys=True) + "\n"
         if args.output:
             Path(args.output).parent.mkdir(parents=True, exist_ok=True)
@@ -69,10 +78,12 @@ def main(argv: list[str] | None = None) -> int:
 
     lease = parse_lease(Path(args.lease))
     if args.command == "success":
-        receipt = Path(args.result_receipt)
-        digest = hashlib.sha256(receipt.read_bytes()).hexdigest()
         result = commit_success(
-            queries, state, lease=lease, result_sha256=digest, committed_at=now_iso()
+            queries,
+            state,
+            lease=lease,
+            result_receipt=Path(args.result_receipt).absolute(),
+            committed_at=now_iso(),
         )
     else:
         result = commit_failure(
