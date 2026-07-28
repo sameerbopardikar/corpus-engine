@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -186,12 +187,39 @@ class SourceRelationship:
         return {"schema_version": SCHEMA_VERSION, "relation_id": self.relation_id, **value}
 
 
+def _open_regular_nofollow(path: Path, flags: int, *, label: str) -> int:
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        raise SourceGraphContractError("no-follow file opens are unavailable")
+    try:
+        descriptor = os.open(
+            path,
+            flags | nofollow | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        raise SourceGraphContractError(f"{label} must be a regular non-symlink file") from exc
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise SourceGraphContractError(f"{label} must be a regular non-symlink file")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
 def _read_graph(path: Path) -> list[SourceRelationship]:
-    if not path.exists():
+    try:
+        descriptor = _open_regular_nofollow(path, os.O_RDONLY, label="source graph")
+    except FileNotFoundError:
         return []
+    with os.fdopen(descriptor, "r", encoding="utf-8") as graph_file:
+        graph_lines = graph_file.read().splitlines()
     relationships: list[SourceRelationship] = []
     seen: set[str] = set()
-    for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for line_number, raw in enumerate(graph_lines, start=1):
         if not raw.strip():
             continue
         try:
@@ -215,7 +243,9 @@ def _read_graph(path: Path) -> list[SourceRelationship]:
 def _append_new(path: Path, relationships: list[SourceRelationship]) -> int:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     lock_path = path.with_suffix(path.suffix + ".lock")
-    lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    lock_fd = _open_regular_nofollow(
+        lock_path, os.O_RDWR | os.O_CREAT, label="source graph lock"
+    )
     os.fchmod(lock_fd, 0o600)
     with os.fdopen(lock_fd, "r+") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
@@ -248,8 +278,9 @@ def _append_new(path: Path, relationships: list[SourceRelationship]) -> int:
             + b"\n"
             for relationship in novel
         )
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
-        fd = os.open(path, flags, 0o600)
+        fd = _open_regular_nofollow(
+            path, os.O_RDWR | os.O_CREAT, label="source graph"
+        )
         original_size = os.fstat(fd).st_size
         try:
             os.fchmod(fd, 0o600)

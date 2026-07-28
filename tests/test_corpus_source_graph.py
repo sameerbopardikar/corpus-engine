@@ -81,6 +81,29 @@ class SourceGraphExpansionTests(unittest.TestCase):
         )
         self.assertEqual(replay["relationships"], 1)
 
+    def test_graph_and_lock_leaf_symlinks_cannot_mutate_external_targets(self):
+        outside_graph = self.root / "outside-graph-sentinel"
+        outside_graph.write_bytes(b"outside graph bytes\n")
+        self.graph.symlink_to(outside_graph)
+        with self.assertRaisesRegex(SourceGraphContractError, "regular non-symlink"):
+            ingest_relationships(
+                [self.relation()], graph_path=self.graph, discovery_ledger_path=self.discovery
+            )
+        self.assertEqual(outside_graph.read_bytes(), b"outside graph bytes\n")
+        self.graph.unlink()
+
+        outside_lock = self.root / "outside-lock-sentinel"
+        outside_lock.write_bytes(b"outside lock bytes\n")
+        lock_path = self.graph.with_suffix(self.graph.suffix + ".lock")
+        lock_path.unlink()
+        lock_path.symlink_to(outside_lock)
+        with self.assertRaisesRegex(SourceGraphContractError, "regular non-symlink"):
+            ingest_relationships(
+                [self.relation()], graph_path=self.graph, discovery_ledger_path=self.discovery
+            )
+        self.assertEqual(outside_lock.read_bytes(), b"outside lock bytes\n")
+        self.assertFalse(self.graph.exists())
+
     def test_unseen_entities_from_multiple_source_families_enter_one_candidate_graph(self):
         relationships = [
             self.relation(),
