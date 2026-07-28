@@ -182,37 +182,128 @@ def _load_config(value: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _paths(state_root: Path, domain: str, state_path: str | None = None) -> dict[str, Path]:
-    base = _reject_symlink_components(state_root)
-    domain_base = base / domain
-    _reject_symlink_components(domain_base)
-    if state_path is None:
-        root = domain_base
-    else:
-        relative = Path(state_path)
-        if (
-            relative.is_absolute()
-            or not relative.parts
-            or relative.parts[0] != domain
-            or any(part in {"", ".", ".."} for part in relative.parts)
-        ):
-            raise SelfExpansionCycleError(
-                "state_path must be a relative path rooted beneath its domain"
-            )
-        root = base.joinpath(*relative.parts)
+def _open_directory_at(parent_fd: int, name: str) -> int:
+    if name in {"", ".", ".."} or "/" in name:
+        raise SelfExpansionCycleError("unsafe state authority component")
+    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        return os.open(name, flags, dir_fd=parent_fd)
+    except FileNotFoundError:
         try:
-            root.relative_to(domain_base)
-        except ValueError as exc:
-            raise SelfExpansionCycleError("state_path escapes its domain state root") from exc
-        _reject_symlink_components(root)
-    return {
-        "root": root,
-        "ledger": root / "discovery-ledger.jsonl",
-        "graph": root / "source-graph.jsonl",
-        "watch": root / "watch-projection.json",
-        "artifacts": root / "artifacts",
-        "receipts": root / "receipts",
-    }
+            os.mkdir(name, mode=0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            pass
+        try:
+            return os.open(name, flags, dir_fd=parent_fd)
+        except OSError as exc:
+            raise SelfExpansionCycleError(
+                f"state authority component is not a no-follow directory: {name}"
+            ) from exc
+    except OSError as exc:
+        raise SelfExpansionCycleError(
+            f"state authority component is not a no-follow directory: {name}"
+        ) from exc
+
+
+def _open_absolute_directory(path: Path) -> tuple[int, Path]:
+    expanded = path.expanduser()
+    if any(part in {".", ".."} for part in expanded.parts):
+        raise SelfExpansionCycleError("state_root cannot contain traversal components")
+    absolute = Path(os.path.abspath(os.fspath(expanded)))
+    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(absolute.anchor, flags)
+    try:
+        for part in absolute.parts[1:]:
+            next_fd = _open_directory_at(fd, part)
+            os.close(fd)
+            fd = next_fd
+        return fd, absolute
+    except Exception:
+        os.close(fd)
+        raise
+
+
+@contextmanager
+def _paths(state_root: Path, domain: str, state_path: str | None = None):
+    """Hold identity-bound directory authorities for one complete domain cycle."""
+    base_fd, base = _open_absolute_directory(state_root)
+    held = [base_fd]
+    try:
+        domain_fd = _open_directory_at(base_fd, domain)
+        held.append(domain_fd)
+        domain_base = base / domain
+        if state_path is None:
+            root_fd = os.dup(domain_fd)
+            root = domain_base
+        else:
+            relative = Path(state_path)
+            if (
+                relative.is_absolute()
+                or not relative.parts
+                or relative.parts[0] != domain
+                or any(part in {"", ".", ".."} for part in relative.parts)
+            ):
+                raise SelfExpansionCycleError(
+                    "state_path must be a relative path rooted beneath its domain"
+                )
+            root_fd = os.dup(domain_fd)
+            root = domain_base
+            for part in relative.parts[1:]:
+                next_fd = _open_directory_at(root_fd, part)
+                os.close(root_fd)
+                root_fd = next_fd
+                root /= part
+        held.append(root_fd)
+        artifacts_fd = _open_directory_at(root_fd, "artifacts")
+        receipts_fd = _open_directory_at(root_fd, "receipts")
+        held.extend([artifacts_fd, receipts_fd])
+        expected = {
+            base: os.fstat(base_fd),
+            domain_base: os.fstat(domain_fd),
+            root: os.fstat(root_fd),
+            root / "artifacts": os.fstat(artifacts_fd),
+            root / "receipts": os.fstat(receipts_fd),
+        }
+
+        def guard() -> None:
+            for authority, fingerprint in expected.items():
+                try:
+                    current = authority.stat(follow_symlinks=False)
+                except (FileNotFoundError, OSError) as exc:
+                    raise SelfExpansionCycleError(
+                        f"state authority changed during cycle: {authority}"
+                    ) from exc
+                if (
+                    stat.S_ISLNK(current.st_mode)
+                    or not stat.S_ISDIR(current.st_mode)
+                    or (current.st_dev, current.st_ino)
+                    != (fingerprint.st_dev, fingerprint.st_ino)
+                ):
+                    raise SelfExpansionCycleError(
+                        f"state authority changed during cycle: {authority}"
+                    )
+
+        guard()
+        bound_root = Path(f"/proc/self/fd/{root_fd}")
+        bound_artifacts = Path(f"/proc/self/fd/{artifacts_fd}")
+        bound_receipts = Path(f"/proc/self/fd/{receipts_fd}")
+        yield {
+            "root": root,
+            "ledger": bound_root / "discovery-ledger.jsonl",
+            "graph": bound_root / "source-graph.jsonl",
+            "watch": bound_root / "watch-projection.json",
+            "artifacts": bound_artifacts,
+            "receipts": bound_receipts,
+            "canonical_artifacts": root / "artifacts",
+            "canonical_receipts": root / "receipts",
+            "guard": guard,
+        }
+    finally:
+        for fd in reversed(held):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 def _candidate_count(ledger: Path) -> int:
@@ -253,6 +344,32 @@ def _run_domain(
     domain = domain_config.get("domain")
     if not isinstance(domain, str) or not _DOMAIN.fullmatch(domain):
         raise SelfExpansionCycleError("domain must be a lowercase slug")
+    with _paths(
+        Path(config["state_root"]), domain, domain_config.get("state_path")
+    ) as paths:
+        paths["guard"]()
+        return _run_domain_bound(
+            domain_config,
+            config=config,
+            now=now,
+            started=started,
+            monotonic=monotonic,
+            paths=paths,
+        )
+
+
+def _run_domain_bound(
+    domain_config: dict[str, Any],
+    *,
+    config: dict[str, Any],
+    now: datetime,
+    started: float,
+    monotonic,
+    paths: dict[str, Any],
+) -> dict[str, Any]:
+    domain = domain_config.get("domain")
+    if not isinstance(domain, str) or not _DOMAIN.fullmatch(domain):
+        raise SelfExpansionCycleError("domain must be a lowercase slug")
     source_artifacts = domain_config.get("source_artifacts", [])
     rights_assertions = domain_config.get("rights_assertions", [])
     inspections = domain_config.get("inspections", [])
@@ -265,9 +382,7 @@ def _run_domain(
             "source_artifacts exceed max_source_artifacts_per_cycle"
         )
 
-    paths = _paths(
-        Path(config["state_root"]), domain, domain_config.get("state_path")
-    )
+    paths["guard"]()
     pre_due_engine = DiscoveryEngine(paths["ledger"])
     initial_candidate_count = len(pre_due_engine.candidates)
     leased_at_start = {
@@ -287,6 +402,7 @@ def _run_domain(
     for index, artifact in enumerate(source_artifacts):
         _deadline_check(started, config["max_wall_seconds"], monotonic)
         try:
+            paths["guard"]()
             remaining_bytes = config["max_total_artifact_bytes_per_cycle"] - artifact_bytes_used
             remaining_relationships = config["max_relationships_per_cycle"] - relationships_used
             if remaining_bytes <= 0 or remaining_relationships <= 0:
@@ -300,6 +416,7 @@ def _run_domain(
                     config["max_relationships_per_artifact"], remaining_relationships
                 ),
             )
+            paths["guard"]()
             _deadline_check(started, config["max_wall_seconds"], monotonic)
             artifact_bytes_used += receipt["byte_length"]
             relationships_used += len(relationships)
@@ -335,17 +452,20 @@ def _run_domain(
         by_identity.setdefault(identity, relationship)
     produced = admitted_produced
     for relationship in produced:
+        paths["guard"]()
         result = ingest_relationships(
             [relationship],
             graph_path=paths["graph"],
             discovery_ledger_path=paths["ledger"],
             max_items=config["max_relationships_per_artifact"],
         )
+        paths["guard"]()
         appended += result["relationships_appended"]
 
     rights_engine = DiscoveryEngine(paths["ledger"])
     for index, assertion in enumerate(rights_assertions):
         try:
+            paths["guard"]()
             if not isinstance(assertion, dict) or set(assertion) != {"canonical_url", "rights_state"}:
                 raise SelfExpansionCycleError("rights assertion fields must be canonical_url and rights_state")
             identity = canonical_entity_identity(assertion["canonical_url"])
@@ -372,6 +492,7 @@ def _run_domain(
                 basis="explicit-body-authorization",
                 asserted_at=_iso(now),
             )
+            paths["guard"]()
             _deadline_check(started, config["max_wall_seconds"], monotonic)
         except SelfExpansionDeadlineExceeded:
             raise
@@ -381,12 +502,14 @@ def _run_domain(
     candidate_count = _candidate_count(paths["ledger"])
     policy = None
     if config["promotion_mode"] == "live":
+        paths["guard"]()
         policy = evaluate_candidates(
             ledger_path=paths["ledger"],
             graph_path=paths["graph"],
             watch_projection_path=paths["watch"],
             evaluated_at=_iso(now),
         )
+        paths["guard"]()
 
     inspection_results: list[dict[str, Any]] = []
     consumed = 0
@@ -430,6 +553,8 @@ def _run_domain(
                 ),
                 max_total_relationships=remaining_relationships,
                 max_candidate_count=initial_candidate_count + config["max_candidates_per_cycle"],
+                authority_guard=paths["guard"],
+                receipt_reference_root=paths["canonical_receipts"],
             )
             _deadline_check(started, config["max_wall_seconds"], monotonic)
             artifact_bytes_used += result["artifact_bytes_preserved"]
@@ -448,12 +573,14 @@ def _run_domain(
         )
     post_policy = None
     if config["promotion_mode"] == "live" and consumed:
+        paths["guard"]()
         post_policy = evaluate_candidates(
             ledger_path=paths["ledger"],
             graph_path=paths["graph"],
             watch_projection_path=paths["watch"],
             evaluated_at=_iso(now),
         )
+        paths["guard"]()
     return {
         "domain": domain,
         "status": "partial_failure" if failures else "completed",

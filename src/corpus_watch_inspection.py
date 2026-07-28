@@ -23,7 +23,7 @@ import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from corpus_adapters.types import TransportPayload
 from corpus_discovery import DiscoveryEngine
@@ -402,7 +402,12 @@ def run_watch_inspection(
     max_relationships_per_artifact: int = 100,
     max_total_relationships: int | None = None,
     max_candidate_count: int | None = None,
+    authority_guard: Callable[[], None] | None = None,
+    receipt_reference_root: Path | None = None,
 ) -> dict[str, Any]:
+    guard = authority_guard or (lambda: None)
+    guard()
+    receipt_reference_root = Path(receipt_reference_root or receipts_root).resolve()
     domain = _text("domain", domain, 256)
     if max_artifacts_per_inspection < 1:
         raise WatchInspectionError("max_artifacts_per_inspection must be positive")
@@ -411,8 +416,11 @@ def run_watch_inspection(
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise WatchInspectionError("now must be a timezone-aware datetime")
     now = now.astimezone(timezone.utc)
+    guard()
     watch_entries = _read_watch_entries(Path(watch_projection_path))
+    guard()
     engine = DiscoveryEngine(Path(ledger_path), authorized_verifiers=frozenset({verifier}))
+    guard()
 
     receipts: list[dict[str, Any]] = []
     consumed: list[str] = []
@@ -448,10 +456,80 @@ def run_watch_inspection(
                 f"watch work item {work.work_id} is {work.state}, not available for inspection"
             )
 
+        guard()
         leased = engine.lease_work(
             work.work_id, owner=lease_owner, ttl_seconds=lease_ttl_seconds, now=now
         )
+        guard()
         try:
+            prepared = _load_prepared_transaction(
+                Path(receipts_root),
+                receipt_reference_root,
+                Path(preserve_root),
+                work,
+                entry,
+                verifier,
+            )
+            if prepared is not None:
+                manifest_path, proof_path, inspection_receipts, relationships = prepared
+                if len(inspection_receipts) > max_artifacts_per_inspection:
+                    raise WatchInspectionError(
+                        "prepared transaction exceeds max_artifacts_per_inspection"
+                    )
+                prepared_bytes = sum(item.byte_length for item in inspection_receipts)
+                if prepared_bytes > max_total_artifact_bytes:
+                    raise WatchInspectionError(
+                        "prepared transaction exceeds max_total_artifact_bytes"
+                    )
+                if (
+                    len(relationships) > max_total_relationships
+                    or any(
+                        sum(1 for rel in relationships if rel.discovered_from_url == receipt.artifact_url)
+                        > max_relationships_per_artifact
+                        for receipt in inspection_receipts
+                    )
+                ):
+                    raise WatchInspectionError(
+                        "prepared transaction exceeds relationship bounds"
+                    )
+                if max_candidate_count is not None:
+                    current_identities = {
+                        canonical_entity_identity(item.canonical_url)
+                        for item in DiscoveryEngine(Path(ledger_path)).candidates.values()
+                    }
+                    projected_identities = current_identities | {
+                        canonical_entity_identity(item.canonical_url) for item in relationships
+                    }
+                    if len(projected_identities) > max_candidate_count:
+                        raise WatchInspectionError(
+                            "prepared transaction would exceed max_candidates_per_cycle"
+                        )
+                guard()
+                ingested = ingest_relationships(
+                    relationships,
+                    graph_path=Path(graph_path),
+                    discovery_ledger_path=Path(ledger_path),
+                )
+                guard()
+                engine = DiscoveryEngine(
+                    Path(ledger_path), authorized_verifiers=frozenset({verifier})
+                )
+                engine.complete_work(
+                    work.work_id,
+                    owner=lease_owner,
+                    lease_token=leased.lease_token or "",
+                    lease_generation=leased.lease_generation,
+                    proof_receipt=str(proof_path),
+                    now=now,
+                )
+                guard()
+                artifact_bytes_total += prepared_bytes
+                derived_total += len(relationships)
+                appended_total += ingested["relationships_appended"]
+                receipts.extend(item.to_dict() for item in inspection_receipts)
+                consumed.append(work.work_id)
+                continue
+
             admitted: dict[str, tuple[ArtifactReceipt, bytes]] = {}
             inspection_receipts: list[ArtifactReceipt] = []
             relationships: list[SourceRelationship] = []
@@ -478,11 +556,13 @@ def run_watch_inspection(
                     raise WatchInspectionError(
                         "inspection cycle exhausted max_total_artifact_bytes"
                     )
+                guard()
                 payload, body, transport = _fetch_artifact(
                     request,
                     preserve_root=Path(preserve_root),
                     max_artifact_bytes=min(max_artifact_bytes, remaining_bytes),
                 )
+                guard()
                 artifact_bytes_total += len(body)
                 receipt = ArtifactReceipt(
                     artifact_url=artifact_url,
@@ -542,6 +622,7 @@ def run_watch_inspection(
             # before canonical graph mutation. If mutation or completion is
             # interrupted, replay reuses the same journal, re-applies edges
             # idempotently, and finalizes the leased work item.
+            guard()
             manifest_path = _write_manifest(
                 Path(receipts_root),
                 work.work_id,
@@ -549,12 +630,22 @@ def run_watch_inspection(
                 relationships,
                 entry,
             )
+            guard()
+            manifest_reference_path = receipt_reference_root / f"inspection-{work.work_id}.json"
             proof_path = _write_proof(
-                Path(receipts_root), work.work_id, manifest_path, work, verifier
+                Path(receipts_root),
+                receipt_reference_root,
+                work.work_id,
+                manifest_path,
+                manifest_reference_path,
+                work,
+                verifier,
             )
+            guard()
             ingested = ingest_relationships(
                 relationships, graph_path=Path(graph_path), discovery_ledger_path=Path(ledger_path)
             )
+            guard()
             derived_total += len(relationships)
             appended_total += ingested["relationships_appended"]
 
@@ -567,9 +658,11 @@ def run_watch_inspection(
                 proof_receipt=str(proof_path),
                 now=now,
             )
+            guard()
         except Exception as exc:
-            # Release the lease so an interrupted inspection is retried rather
-            # than stranding the promoted source's durable work item.
+            # Release only while the original identity-bound authority still
+            # exists. If it changed, fail without writing through the replacement.
+            guard()
             engine = DiscoveryEngine(Path(ledger_path), authorized_verifiers=frozenset({verifier}))
             try:
                 engine.fail_work(
@@ -628,7 +721,13 @@ def _write_manifest(
 
 
 def _write_proof(
-    receipts_root: Path, work_id: str, manifest_path: Path, work, verifier: str
+    receipts_root: Path,
+    receipt_reference_root: Path,
+    work_id: str,
+    manifest_path: Path,
+    manifest_reference_path: Path,
+    work,
+    verifier: str,
 ) -> Path:
     proof = {
         "schema_version": 1,
@@ -637,7 +736,7 @@ def _write_proof(
         "action": work.action,
         "verifier": verifier,
         "verified": True,
-        "artifact_path": str(manifest_path),
+        "artifact_path": str(manifest_reference_path),
         "artifact_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
     }
     path = receipts_root.resolve() / f"proof-{work_id}.json"
@@ -647,4 +746,163 @@ def _write_proof(
             "utf-8"
         ),
     )
-    return path
+    return receipt_reference_root / f"proof-{work_id}.json"
+
+
+def _read_regular_bounded(path: Path, *, max_bytes: int, label: str) -> bytes:
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+    except OSError as exc:
+        raise WatchInspectionError(f"{label} is not a no-follow regular file") from exc
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size < 1 or before.st_size > max_bytes:
+            raise WatchInspectionError(f"{label} size is invalid")
+        chunks: list[bytes] = []
+        length = 0
+        while length <= max_bytes:
+            chunk = os.read(descriptor, min(1024 * 1024, max_bytes + 1 - length))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            length += len(chunk)
+        after = os.fstat(descriptor)
+        if (
+            length < 1
+            or length > max_bytes
+            or (before.st_dev, before.st_ino, before.st_size)
+            != (after.st_dev, after.st_ino, after.st_size)
+            or length != after.st_size
+        ):
+            raise WatchInspectionError(f"{label} changed during bounded read")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _load_prepared_transaction(
+    receipts_root: Path,
+    receipt_reference_root: Path,
+    preserve_root: Path,
+    work,
+    entry: dict[str, Any],
+    verifier: str,
+) -> tuple[Path, Path, list[ArtifactReceipt], list[SourceRelationship]] | None:
+    manifest_path = receipts_root.resolve() / f"inspection-{work.work_id}.json"
+    proof_path = receipts_root.resolve() / f"proof-{work.work_id}.json"
+    manifest_reference_path = receipt_reference_root / f"inspection-{work.work_id}.json"
+    proof_reference_path = receipt_reference_root / f"proof-{work.work_id}.json"
+    manifest_exists = manifest_path.exists()
+    proof_exists = proof_path.exists()
+    if not manifest_exists and not proof_exists:
+        return None
+    if manifest_exists != proof_exists:
+        raise WatchInspectionError("prepared transaction journal is incomplete")
+    if manifest_path.is_symlink() or proof_path.is_symlink():
+        raise WatchInspectionError("prepared transaction journal cannot be symlinked")
+    manifest_raw = _read_regular_bounded(
+        manifest_path, max_bytes=2 * 1024 * 1024, label="prepared manifest"
+    )
+    proof_raw = _read_regular_bounded(
+        proof_path, max_bytes=64 * 1024, label="prepared proof"
+    )
+    try:
+        reject_constant = lambda value: (_ for _ in ()).throw(
+            ValueError(f"non-finite JSON constant: {value}")
+        )
+        manifest = json.loads(manifest_raw.decode("utf-8"), parse_constant=reject_constant)
+        proof = json.loads(proof_raw.decode("utf-8"), parse_constant=reject_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise WatchInspectionError("prepared transaction journal is not valid JSON") from exc
+    manifest_fields = {
+        "schema_version", "transaction_phase", "work_id", "candidate_id",
+        "watch_canonical_url", "artifact_receipts", "intended_relationships",
+    }
+    proof_fields = {
+        "schema_version", "work_id", "candidate_id", "action", "verifier",
+        "verified", "artifact_path", "artifact_sha256",
+    }
+    if not isinstance(manifest, dict) or set(manifest) != manifest_fields:
+        raise WatchInspectionError("prepared manifest fields are invalid")
+    if not isinstance(proof, dict) or set(proof) != proof_fields:
+        raise WatchInspectionError("prepared proof fields are invalid")
+    if (
+        manifest.get("schema_version") != SCHEMA_VERSION
+        or manifest.get("transaction_phase") != "prepared"
+        or manifest.get("work_id") != work.work_id
+        or manifest.get("candidate_id") != work.candidate_id
+        or manifest.get("watch_canonical_url") != entry.get("canonical_url")
+    ):
+        raise WatchInspectionError("prepared manifest identity mismatch")
+    if (
+        proof.get("schema_version") != 1
+        or proof.get("work_id") != work.work_id
+        or proof.get("candidate_id") != work.candidate_id
+        or proof.get("action") != work.action
+        or proof.get("verifier") != verifier
+        or proof.get("verified") is not True
+        or proof.get("artifact_path") != str(manifest_reference_path)
+        or proof.get("artifact_sha256") != hashlib.sha256(manifest_raw).hexdigest()
+    ):
+        raise WatchInspectionError("prepared proof identity or digest mismatch")
+    raw_receipts = manifest.get("artifact_receipts")
+    raw_relationships = manifest.get("intended_relationships")
+    if not isinstance(raw_receipts, list) or not raw_receipts:
+        raise WatchInspectionError("prepared manifest has no artifact receipts")
+    if not isinstance(raw_relationships, list):
+        raise WatchInspectionError("prepared manifest relationships are invalid")
+    try:
+        receipts = []
+        for item in raw_receipts:
+            payload = dict(_object("prepared artifact receipt", item))
+            if payload.pop("schema_version", None) != SCHEMA_VERSION:
+                raise ValueError("prepared artifact receipt schema mismatch")
+            receipts.append(ArtifactReceipt(**payload))
+        relationships = []
+        for item in raw_relationships:
+            payload = dict(_object("prepared relationship", item))
+            if payload.pop("schema_version", None) != SCHEMA_VERSION:
+                raise ValueError("prepared relationship schema mismatch")
+            relation_id = payload.pop("relation_id", None)
+            relationship = SourceRelationship.from_dict(payload)
+            if relation_id != relationship.relation_id:
+                raise ValueError("prepared relationship identity mismatch")
+            relationships.append(relationship)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise WatchInspectionError("prepared transaction payload is invalid") from exc
+    preserve_base = preserve_root.resolve()
+    for receipt in receipts:
+        artifact_path = Path(receipt.preserved_path)
+        if (
+            receipt.work_id != work.work_id
+            or receipt.watch_candidate_id != work.candidate_id
+            or artifact_path.is_symlink()
+            or not artifact_path.is_file()
+        ):
+            raise WatchInspectionError("prepared artifact receipt identity is invalid")
+        try:
+            artifact_path.resolve().relative_to(preserve_base)
+        except ValueError as exc:
+            raise WatchInspectionError("prepared artifact escaped preserve_root") from exc
+        descriptor = os.open(
+            artifact_path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            info = os.fstat(descriptor)
+            digest = hashlib.sha256()
+            length = 0
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                length += len(chunk)
+        finally:
+            os.close(descriptor)
+        if not stat.S_ISREG(info.st_mode) or length != receipt.byte_length or digest.hexdigest() != receipt.sha256:
+            raise WatchInspectionError("prepared artifact receipt bytes do not match")
+    return manifest_reference_path, proof_reference_path, receipts, relationships

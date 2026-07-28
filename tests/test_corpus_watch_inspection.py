@@ -195,7 +195,12 @@ class WatchInspectionTests(unittest.TestCase):
     def test_prepared_journal_recovers_after_post_mutation_completion_failure(self):
         policy = self.promote_watch_source()
         work_id = policy["watch_work_ids"][0]
-        inspection = {"watch_source_url": WATCH_SOURCE, "artifacts": [self.artifact()]}
+        source_path = self.root / "mutable-source.json"
+        source_path.write_bytes(self.repository_bytes)
+        artifact = self.artifact()
+        artifact.pop("content_bytes")
+        artifact["content_path"] = str(source_path)
+        inspection = {"watch_source_url": WATCH_SOURCE, "artifacts": [artifact]}
         with patch(
             "corpus_watch_inspection.DiscoveryEngine.complete_work",
             side_effect=OSError("injected completion failure"),
@@ -206,6 +211,7 @@ class WatchInspectionTests(unittest.TestCase):
         self.assertEqual(pending.work_items[work_id].state, "pending")
         self.assertTrue((self.receipts / f"proof-{work_id}.json").is_file())
         line_count = len(self.graph.read_text(encoding="utf-8").splitlines())
+        source_path.unlink()
 
         recovered = self.inspect([inspection], now=NOW + timedelta(days=1))
         self.assertEqual(recovered["consumed_work_ids"], [work_id])

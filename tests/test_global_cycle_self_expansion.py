@@ -17,6 +17,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+import corpus_self_expansion_cycle as cycle_module
 from corpus_discovery import DiscoveryEngine
 from corpus_self_expansion_cycle import run_self_expansion_cycle
 
@@ -166,7 +167,12 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
         receipt = run_self_expansion_cycle(config, now=NOW_A)
         self.assertEqual(receipt["status"], "partial_failure")
-        self.assertTrue(any("symlink component" in item["error"] for item in receipt["failures"]))
+        self.assertTrue(
+            any(
+                "no-follow" in item["error"] or "state authority" in item["error"]
+                for item in receipt["failures"]
+            )
+        )
         self.assertEqual(list(training.iterdir()), [sentinel])
 
     def test_dangling_nested_state_symlink_fails_closed(self):
@@ -179,8 +185,60 @@ class GlobalCycleSelfExpansionTests(unittest.TestCase):
         config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
         receipt = run_self_expansion_cycle(config, now=NOW_A)
         self.assertEqual(receipt["status"], "partial_failure")
-        self.assertTrue(any("symlink component" in item["error"] for item in receipt["failures"]))
+        self.assertTrue(
+            any(
+                "no-follow" in item["error"] or "state authority" in item["error"]
+                for item in receipt["failures"]
+            )
+        )
         self.assertFalse((state / "missing-target").exists())
+
+    def test_artifact_and_receipt_leaf_symlinks_fail_without_external_writes(self):
+        for leaf in ("artifacts", "receipts"):
+            with self.subTest(leaf=leaf):
+                state = self.tmp / f"corpora-{leaf}"
+                root = state / DOMAIN / "self-expansion-v1"
+                root.mkdir(parents=True)
+                outside = self.tmp / f"outside-{leaf}"
+                outside.mkdir()
+                sentinel = outside / "sentinel"
+                sentinel.write_text("unchanged\n", encoding="utf-8")
+                (root / leaf).symlink_to(outside, target_is_directory=True)
+                config = _config(state)
+                config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
+                receipt = run_self_expansion_cycle(config, now=NOW_A)
+                self.assertEqual(receipt["status"], "partial_failure")
+                self.assertEqual(list(outside.iterdir()), [sentinel])
+                self.assertTrue(
+                    any("no-follow" in item["error"] for item in receipt["failures"]),
+                    receipt["failures"],
+                )
+
+    def test_authority_replacement_after_open_fails_before_ledger_write(self):
+        state = self.tmp / "race-state"
+        config = _config(state)
+        config["domains"][0]["state_path"] = f"{DOMAIN}/self-expansion-v1"
+        original = cycle_module._run_domain_bound
+        moved = state / "training"
+
+        def replace_then_run(domain_config, **kwargs):
+            root = state / DOMAIN / "self-expansion-v1"
+            root.rename(moved)
+            root.symlink_to(moved, target_is_directory=True)
+            return original(domain_config, **kwargs)
+
+        with patch(
+            "corpus_self_expansion_cycle._run_domain_bound",
+            side_effect=replace_then_run,
+        ):
+            receipt = run_self_expansion_cycle(config, now=NOW_A)
+        self.assertEqual(receipt["status"], "partial_failure")
+        self.assertFalse((moved / "discovery-ledger.jsonl").exists())
+        self.assertFalse((moved / "source-graph.jsonl").exists())
+        self.assertTrue(
+            any("state authority changed" in item["error"] for item in receipt["failures"]),
+            receipt["failures"],
+        )
 
     def test_injected_monotonic_clock_enforces_wall_cap(self):
         config = _config(self.tmp / "state")
