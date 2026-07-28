@@ -128,7 +128,9 @@ _TRANSPORT_MODES = {
 }
 
 
-def _request_bytes(request: dict[str, Any]) -> tuple[bytes, str]:
+def _request_bytes(
+    request: dict[str, Any], *, max_artifact_bytes: int = MAX_ARTIFACT_BYTES
+) -> tuple[bytes, str]:
     """Read the artifact body and report how it was obtained.
 
     The transport mode travels into the receipt so a frozen-fixture fetch can
@@ -156,18 +158,18 @@ def _request_bytes(request: dict[str, Any]) -> tuple[bytes, str]:
         body = path.read_bytes()
     if not body:
         raise WatchInspectionError("artifact bytes must be non-empty")
-    if len(body) > MAX_ARTIFACT_BYTES:
+    if len(body) > max_artifact_bytes:
         raise WatchInspectionError("artifact exceeds the preserved-byte limit")
     return body, transport
 
 
 def _fetch_artifact(
-    request: dict[str, Any], *, preserve_root: Path
+    request: dict[str, Any], *, preserve_root: Path, max_artifact_bytes: int = MAX_ARTIFACT_BYTES
 ) -> tuple[TransportPayload, bytes, str]:
     """Fetch through the adapter transport contract and preserve the exact bytes."""
     artifact_url = _text("artifact_url", request.get("artifact_url"))
     declared = _text("content_sha256", request.get("content_sha256"), 64).lower()
-    body, transport = _request_bytes(request)
+    body, transport = _request_bytes(request, max_artifact_bytes=max_artifact_bytes)
     actual = hashlib.sha256(body).hexdigest()
     if declared != actual:
         raise WatchInspectionError(
@@ -320,6 +322,52 @@ def _resolve_work(engine: DiscoveryEngine, entry: dict[str, Any], *, domain: str
     return work
 
 
+def project_preserved_source_artifact(
+    *,
+    domain: str,
+    request: dict[str, Any],
+    preserve_root: Path,
+    max_artifact_bytes: int = MAX_ARTIFACT_BYTES,
+    max_relationships: int = 100,
+) -> tuple[dict[str, Any], list[SourceRelationship]]:
+    """Preserve one explicitly body-authorized source artifact and derive edges.
+
+    This is the first-order counterpart to the durable watch consumer. It does
+    not enqueue, promote, or grant rights; callers must project the returned
+    relationships through ``ingest_relationships``.
+    """
+    rights_state = _text("rights_state", request.get("rights_state"), 64)
+    if rights_state not in _BODY_AUTHORIZED_RIGHTS:
+        raise WatchInspectionError(
+            "source artifact body projection requires explicit public_rights_clear "
+            "or private_authorized rights"
+        )
+    payload, body, transport = _fetch_artifact(
+        request,
+        preserve_root=Path(preserve_root),
+        max_artifact_bytes=max_artifact_bytes,
+    )
+    artifact_url = _text("artifact_url", request.get("artifact_url"))
+    relationships = _derive_relationships(
+        request=request, artifact_url=artifact_url, body=body, domain=domain
+    )
+    if len(relationships) > max_relationships:
+        raise WatchInspectionError("artifact relationship count exceeds max_relationships")
+    return (
+        {
+            "artifact_url": artifact_url,
+            "artifact_identity": _identity("artifact_url", artifact_url),
+            "preserved_path": payload.raw_pointer,
+            "sha256": payload.raw_sha256,
+            "byte_length": len(body),
+            "transport": transport,
+            "rights_state": rights_state,
+            "relationships_derived": len(relationships),
+        },
+        relationships,
+    )
+
+
 def run_watch_inspection(
     *,
     domain: str,
@@ -333,6 +381,9 @@ def run_watch_inspection(
     lease_owner: str = DEFAULT_LEASE_OWNER,
     verifier: str = DEFAULT_VERIFIER,
     lease_ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
+    max_artifact_bytes: int = MAX_ARTIFACT_BYTES,
+    max_relationships_per_artifact: int = 100,
+    max_candidate_count: int | None = None,
 ) -> dict[str, Any]:
     domain = _text("domain", domain, 256)
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
@@ -395,7 +446,9 @@ def run_watch_inspection(
                     admitted=admitted,
                 )
                 payload, body, transport = _fetch_artifact(
-                    request, preserve_root=Path(preserve_root)
+                    request,
+                    preserve_root=Path(preserve_root),
+                    max_artifact_bytes=max_artifact_bytes,
                 )
                 receipt = ArtifactReceipt(
                     artifact_url=artifact_url,
@@ -419,6 +472,10 @@ def run_watch_inspection(
                 derived = _derive_relationships(
                     request=request, artifact_url=artifact_url, body=body, domain=domain
                 )
+                if len(derived) > max_relationships_per_artifact:
+                    raise WatchInspectionError(
+                        "artifact relationship count exceeds max_relationships_per_artifact"
+                    )
                 for relationship in derived:
                     if relationship.domain != domain:
                         raise WatchInspectionError("derived relationship domain mismatch")
@@ -431,6 +488,18 @@ def run_watch_inspection(
 
             if not inspection_receipts:
                 raise WatchInspectionError("inspection produced no artifact receipts")
+            if max_candidate_count is not None:
+                current_identities = {
+                    canonical_entity_identity(item.canonical_url)
+                    for item in DiscoveryEngine(Path(ledger_path)).candidates.values()
+                }
+                projected_identities = current_identities | {
+                    canonical_entity_identity(item.canonical_url) for item in relationships
+                }
+                if len(projected_identities) > max_candidate_count:
+                    raise WatchInspectionError(
+                        "inspection would exceed max_candidates_per_cycle"
+                    )
             ingested = ingest_relationships(
                 relationships, graph_path=Path(graph_path), discovery_ledger_path=Path(ledger_path)
             )

@@ -23,6 +23,9 @@ EXECUTE="${CORPUS_ACQUISITION_EXECUTE:-1}"
 LEGACY_SHIMS="${CORPUS_LEGACY_SHIMS:-1}"
 SELF_EXPANSION_PROOF_CONFIG="${CORPUS_SELF_EXPANSION_PROOF_CONFIG:-}"
 SELF_EXPANSION_PROOF_ROOT="${CORPUS_SELF_EXPANSION_PROOF_ROOT:-}"
+SELF_EXPANSION_CONFIG="${CORPUS_SELF_EXPANSION_CONFIG:-}"
+# Test-only deterministic clock used by isolated integration fixtures.
+SELF_EXPANSION_TEST_NOW="${CORPUS_SELF_EXPANSION_TEST_NOW:-}"
 GLOBAL_RESULT="$(mktemp)"
 trap 'rm -f "$GLOBAL_RESULT"' EXIT
 
@@ -37,6 +40,12 @@ fi
 # it discovers, resolves rights fail-closed, and admits budget-selected rights-
 # clear evidence per domain; in dry-run mode it only plans.
 CYCLE_ARGS=(--config-dir "$CONFIG_DIR" --budget-path "$BUDGET_PATH")
+if [[ -n "$SELF_EXPANSION_CONFIG" ]]; then
+  CYCLE_ARGS+=(--self-expansion-config "$SELF_EXPANSION_CONFIG")
+fi
+if [[ -n "$SELF_EXPANSION_TEST_NOW" ]]; then
+  CYCLE_ARGS+=(--self-expansion-now "$SELF_EXPANSION_TEST_NOW")
+fi
 if [[ "$EXECUTE" != "0" ]]; then
   CYCLE_ARGS+=(--execute --corpora-root "$CORPORA_ROOT")
 fi

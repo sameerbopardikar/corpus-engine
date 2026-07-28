@@ -59,6 +59,22 @@ class WrapperExecuteModeTests(unittest.TestCase):
         self.assertNotIn("--execute", recorded)
         self.assertNotIn("--corpora-root", recorded)
 
+    def test_normal_self_expansion_config_is_forwarded_to_global_cycle(self):
+        config = self.tmp / "self-expansion.json"
+        config.write_text('{"schema_version":1,"enabled":false}\n')
+        recorded = self._run(
+            execute_env="0",
+            extra_env={
+                "CORPUS_LEGACY_SHIMS": "0",
+                "CORPUS_SELF_EXPANSION_CONFIG": str(config),
+                "CORPUS_SELF_EXPANSION_TEST_NOW": "2026-07-28T10:00:00Z",
+            },
+        )
+        global_call = recorded.splitlines()[0]
+        self.assertIn(f"--self-expansion-config {config}", global_call)
+        self.assertIn("--self-expansion-now 2026-07-28T10:00:00Z", global_call)
+        self.assertNotIn("corpus_self_expansion_proof.py", recorded)
+
     def test_opt_in_self_expansion_proof_runs_through_the_recurring_wrapper(self):
         proof_root = self.tmp / "self-expansion-proof"
         proof_config = ROOT / "evals" / "self-expansion" / "fixtures" / "two-cycle-proof-config.json"
